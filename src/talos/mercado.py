@@ -6,7 +6,9 @@ ativo rende, em média por ano, do dia da aplicação até o fim da meta.
 
 from __future__ import annotations
 
+import zlib
 from collections.abc import Sequence
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -115,6 +117,12 @@ class Cenarios:
     dias_uteis_por_ano: int
     medias_aa: dict[str, float]
     retornos_aa: dict[str, npt.NDArray[np.float64]]
+    graus_liberdade: float | None = None
+
+    @property
+    def anos(self) -> float:
+        """Prazo em anos."""
+        return self.prazo_meses / MESES_POR_ANO
 
     @property
     def quantidade(self) -> int:
@@ -162,6 +170,34 @@ def choques_t_correlacionados(
     return normais / susto[:, None] * ajuste_variancia
 
 
+def choques_mensais_somados(
+    quantidade: int,
+    meses: int,
+    correlacoes: Sequence[Sequence[float]],
+    graus_liberdade: float,
+    gerador: np.random.Generator,
+) -> npt.NDArray[np.float64]:
+    """Sorteia um choque t de Student correlacionado por mês e soma os meses.
+
+    O resultado é dividido por raiz(meses) para ter variância 1. Num prazo de
+    1 mês fica igual a um choque t (caudas gordas); em prazos longos os meses
+    bons e ruins se compensam e a soma fica mais parecida com a normal, como
+    acontece com retornos de verdade.
+    """
+    matriz = np.asarray(correlacoes, dtype=float)
+    try:
+        fator = np.linalg.cholesky(matriz)
+    except np.linalg.LinAlgError as erro:
+        raise ErroDeDados(
+            "cenarios: a matriz de correlações é impossível (não é positiva definida)."
+        ) from erro
+    normais = gerador.standard_normal((meses, quantidade, len(matriz))) @ fator.T
+    susto = np.sqrt(gerador.chisquare(graus_liberdade, size=(meses, quantidade)) / graus_liberdade)
+    ajuste_variancia = np.sqrt((graus_liberdade - 2) / graus_liberdade)
+    mensais = normais / susto[:, :, None] * ajuste_variancia
+    return mensais.sum(axis=0) / np.sqrt(meses)
+
+
 def gerar_cenarios(
     premissas: Premissas,
     curva: CurvaDI,
@@ -171,12 +207,12 @@ def gerar_cenarios(
 ) -> Cenarios:
     """Gera cenários de retorno anualizado de cada classe até `prazo_meses`.
 
-    Para cada classe, com `anos` = prazo em anos:
-    log(1 + retorno) = log(1 + média) - desvio² * anos / 2 + desvio * choque.
-    Trabalhar no logaritmo impede perdas acima de 100%. O termo
-    `- desvio² * anos / 2` faz o patrimônio esperado no fim do prazo crescer
-    à média pedida: em média, R$ 1 vira (1 + média) ^ anos. A semente e a
-    quantidade vêm das premissas quando não são informadas.
+    Para cada classe: log(1 + retorno) = log(1 + média) + desvio * choque,
+    depois deslocado por uma constante (`centrar_na_media`) para que, nos
+    cenários sorteados, R$ 1 vire em média exatamente (1 + média) ^ anos.
+    Trabalhar no logaritmo impede perdas acima de 100%; o deslocamento evita
+    que os poucos cenários extremos da t de Student inflem a média. A semente
+    e a quantidade vêm das premissas quando não são informadas.
     """
     if prazo_meses < 1:
         raise ErroDeDados("cenarios: o prazo precisa ser de pelo menos 1 mês.")
@@ -187,8 +223,8 @@ def gerar_cenarios(
     cdi = cdi_medio_projetado(curva, prazo_meses)
 
     gerador = np.random.default_rng(semente)
-    choques = choques_t_correlacionados(
-        quantidade, parametros.correlacoes, parametros.graus_liberdade, gerador
+    choques = choques_mensais_somados(
+        quantidade, prazo_meses, parametros.correlacoes, parametros.graus_liberdade, gerador
     )
     medias: dict[str, float] = {}
     retornos: dict[str, npt.NDArray[np.float64]] = {}
@@ -196,7 +232,7 @@ def gerar_cenarios(
         classe = parametros.classes[nome]
         medias[nome] = cdi + classe.premio_sobre_cdi_aa
         desvio = volatilidade_no_prazo(classe, anos)
-        log_retorno = np.log1p(medias[nome]) - desvio ** 2 * anos / 2 + desvio * choques[:, coluna]
+        log_retorno = centrar_na_media(np.log1p(medias[nome]) + desvio * choques[:, coluna], medias[nome], anos)
         retornos[nome] = np.expm1(log_retorno)
         if np.any(retornos[nome] <= -1):
             raise ErroDeDados(
@@ -212,7 +248,24 @@ def gerar_cenarios(
         dias_uteis_por_ano=premissas.dias_uteis_por_ano,
         medias_aa=medias,
         retornos_aa=retornos,
+        graus_liberdade=parametros.graus_liberdade,
     )
+
+
+def centrar_na_media(
+    log_retorno_aa: npt.NDArray[np.float64], media_aa: float, anos: float
+) -> npt.NDArray[np.float64]:
+    """Desloca os log-retornos anuais para o patrimônio médio no fim do prazo ser (1 + média) ^ anos.
+
+    O patrimônio de cada cenário é exp(anos * log-retorno). Somar a mesma
+    constante a todos os cenários muda a média sem mudar a forma da
+    distribuição (as caudas gordas continuam). A média dos exponenciais é
+    calculada tirando o maior valor antes, para não estourar.
+    """
+    total = anos * log_retorno_aa
+    maior = total.max()
+    log_media_atual = maior + np.log(np.mean(np.exp(total - maior)))
+    return log_retorno_aa + (anos * np.log1p(media_aa) - log_media_atual) / anos
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +292,9 @@ def retorno_antes_do_ir(produto: Produto, cenarios: Cenarios) -> npt.NDArray[np.
     - `prefixado`: a taxa contratada, mais o desvio da classe prefixada
       (zero nas premissas de exemplo, pois quem leva ao vencimento recebe a taxa);
     - `ipca`: IPCA do cenário mais o spread;
-    - `variavel`: o retorno da própria classe do produto.
+    - `variavel`: o retorno da própria classe do produto; para ações
+      individuais, o retorno da bolsa ajustado pelo beta, pelo alfa e pela
+      oscilação própria da empresa (veja `retorno_da_acao`).
     """
     retornos = cenarios.retornos_aa
     if produto.indexador == "cdi":
@@ -251,11 +306,65 @@ def retorno_antes_do_ir(produto: Produto, cenarios: Cenarios) -> npt.NDArray[np.
         bruto = (1 + produto.taxa) * desvio - 1
     elif produto.indexador == "ipca":
         bruto = (1 + cenarios.ipca_aa()) * (1 + produto.taxa) - 1
+    elif produto.indexador == "variavel" and produto.acao_individual:
+        bruto = retorno_da_acao(produto, cenarios)
     elif produto.indexador == "variavel":
         bruto = retornos[produto.classe]
     else:
         raise ErroDeDados(f"produto '{produto.nome}': indexador '{produto.indexador}' não reconhecido.")
     return (1 + bruto) * (1 - produto.taxa_adm_aa) - 1
+
+
+def retorno_da_acao(produto: Produto, cenarios: Cenarios) -> npt.NDArray[np.float64]:
+    """Retorno anual de uma ação individual em cada cenário.
+
+    Em logaritmos, com f = CDI do cenário e m = bolsa (classe da ação):
+    log(1 + r) = log(1 + f) + beta * (log(1 + m) - log(1 + f)) + desvio * choque,
+    onde desvio = volatilidade própria / raiz(anos). O choque é próprio da
+    empresa (independente da bolsa e das outras ações), com as mesmas caudas
+    gordas dos cenários, e sempre igual para a mesma ação, semente e prazo.
+
+    Depois, os cenários são centrados (`centrar_na_media`) no retorno esperado
+    pela análise: CDI projetado + beta * (média da bolsa - CDI projetado) + alfa.
+    """
+    livre = np.log1p(cenarios.retornos_aa["pos_fixado"])
+    bolsa = np.log1p(cenarios.retornos_aa[produto.classe])
+    desvio = produto.volatilidade_propria_aa / np.sqrt(cenarios.anos)
+    log_retorno = livre + produto.beta * (bolsa - livre) + desvio * choques_proprios(produto, cenarios)
+    cdi = cenarios.cdi_projetado_aa
+    esperado = cdi + produto.beta * (cenarios.medias_aa[produto.classe] - cdi) + produto.alfa_aa
+    return np.expm1(centrar_na_media(log_retorno, esperado, cenarios.anos))
+
+
+def choques_proprios(produto: Produto, cenarios: Cenarios) -> npt.NDArray[np.float64]:
+    """Choques da própria empresa, um por cenário, com variância 1.
+
+    Como na bolsa, é um choque t de Student por mês, somado ao longo do prazo.
+    A semente combina a semente dos cenários com um código fixo do nome do
+    produto (CRC32), então cada ação tem sua sequência, sempre a mesma.
+    """
+    if produto.volatilidade_propria_aa == 0:
+        return np.zeros(cenarios.quantidade)
+    if cenarios.graus_liberdade is None:
+        raise ErroDeDados("cenarios: faltam os graus de liberdade para sortear os choques das ações.")
+    return _choques_da_empresa(
+        produto.nome, cenarios.semente, cenarios.prazo_meses, cenarios.quantidade, cenarios.graus_liberdade
+    )
+
+
+@lru_cache(maxsize=256)
+def _choques_da_empresa(
+    nome: str, semente: int, meses: int, quantidade: int, graus_liberdade: float
+) -> npt.NDArray[np.float64]:
+    """Sorteia (uma vez só, depois reaproveita) os choques próprios de uma empresa.
+
+    O resultado fica somente leitura, porque a mesma tabela é devolvida a
+    cada chamada com os mesmos argumentos.
+    """
+    gerador = np.random.default_rng([semente, zlib.crc32(nome.encode("utf-8"))])
+    choques = choques_mensais_somados(quantidade, meses, ((1.0,),), graus_liberdade, gerador)[:, 0]
+    choques.setflags(write=False)
+    return choques
 
 
 def retornos_antes_do_ir(

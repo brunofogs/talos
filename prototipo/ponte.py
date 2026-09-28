@@ -17,11 +17,18 @@ from talos.explicacao import explicar
 from talos.mercado import carregar_curva_di, cdi_medio_projetado
 from talos.modelos import (
     ErroDeDados,
+    carregar_acoes,
     carregar_prateleira,
     carregar_premissas,
     cliente_de_dados,
 )
 from talos.otimizador import ResultadoMeta, otimizar_cliente
+
+def carregar_produtos(pasta: Path) -> list:
+    """Prateleira mais a lista de ações da corretora (`acoes.csv`), se existir."""
+    acoes = carregar_acoes(pasta / "acoes.csv") if (pasta / "acoes.csv").exists() else []
+    return carregar_prateleira(pasta / "prateleira.csv") + acoes
+
 
 def dados_da_prateleira(pasta_dados: str | Path) -> str:
     """Prateleira, premissas principais e cliente de exemplo, em JSON, para a página exibir."""
@@ -30,7 +37,7 @@ def dados_da_prateleira(pasta_dados: str | Path) -> str:
     curva = carregar_curva_di(pasta / "curva_di.csv", premissas)
     cliente = json.loads((pasta / "cliente.json").read_text(encoding="utf-8"))
     return json.dumps({
-        "produtos": [asdict(p) for p in carregar_prateleira(pasta / "prateleira.csv")],
+        "produtos": [asdict(p) for p in carregar_produtos(pasta)],
         "perfis": {nome: asdict(perfil) for nome, perfil in premissas.perfis.items()},
         "data_referencia": premissas.data_referencia.isoformat(),
         "cdi_12_meses": cdi_medio_projetado(curva, 12),
@@ -50,6 +57,7 @@ def simular(entrada_json: str, pasta_dados: str | Path) -> str:
     try:
         entrada = json.loads(entrada_json)
         quantidade = entrada.pop("quantidade", None)
+        estrategia = entrada.pop("estrategia", "menor_risco")
         cliente = cliente_de_dados(entrada)
         premissas = carregar_premissas(pasta / "premissas.json")
         premissas.perfil(cliente.perfil)
@@ -57,8 +65,11 @@ def simular(entrada_json: str, pasta_dados: str | Path) -> str:
         return json.dumps({"erro": str(erro)}, ensure_ascii=False)
 
     curva = carregar_curva_di(pasta / "curva_di.csv", premissas)
-    produtos = carregar_prateleira(pasta / "prateleira.csv")
-    recomendacao = otimizar_cliente(cliente, produtos, premissas, curva, quantidade=quantidade)
+    produtos = carregar_produtos(pasta)
+    try:
+        recomendacao = otimizar_cliente(cliente, produtos, premissas, curva, quantidade=quantidade, estrategia=estrategia)
+    except ErroDeDados as erro:
+        return json.dumps({"erro": str(erro)}, ensure_ascii=False)
     explicacao = explicar(recomendacao, premissas)
 
     metas = []
@@ -78,6 +89,8 @@ def simular(entrada_json: str, pasta_dados: str | Path) -> str:
             "alocacoes": [
                 {
                     "produto": a.produto.nome,
+                    "ticker": a.produto.ticker,
+                    "setor": a.produto.setor,
                     "emissor": a.produto.emissor,
                     "classe": a.produto.classe,
                     "peso": a.peso,
@@ -93,6 +106,7 @@ def simular(entrada_json: str, pasta_dados: str | Path) -> str:
     return json.dumps({
         "perfil": recomendacao.perfil.nome,
         "semente": recomendacao.semente,
+        "estrategia": recomendacao.estrategia,
         "antes_de_tudo": list(explicacao.antes_de_tudo),
         "metas": metas,
         "aviso": explicacao.aviso,

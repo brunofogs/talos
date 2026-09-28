@@ -65,6 +65,26 @@ def test_linhas_nao_passam_da_largura(tmp_path: Path, capsys: pytest.CaptureFixt
     assert all(len(linha) <= 88 for linha in linhas if not linha.startswith("Registro de auditoria:"))
 
 
+def test_estrategia_crescimento_com_acoes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Com a lista de ações da pasta de exemplos e --estrategia crescimento, ações aparecem no relatório."""
+    dados = json.loads((EXEMPLOS / "cliente.json").read_text(encoding="utf-8"))
+    dados["perfil"] = "arrojado"
+    cliente = tmp_path / "cliente.json"
+    cliente.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+    argumentos = argumentos_de_exemplo(tmp_path, "--estrategia", "crescimento")
+    argumentos[2] = str(cliente)
+    assert main(argumentos) == 0
+    saida = capsys.readouterr().out
+    assert "estratégia crescimento" in saida
+    assert "-F (" in saida
+
+
+def test_lista_de_acoes_inexistente(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """--acoes apontando para um arquivo que não existe gera mensagem clara e código 2."""
+    assert main(argumentos_de_exemplo(tmp_path, "--acoes", str(tmp_path / "nao_existe.csv"))) == 2
+    assert "Arquivo não encontrado" in capsys.readouterr().err
+
+
 def test_arquivo_inexistente(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Cliente que não existe: mensagem clara e código de saída 2."""
     argumentos = argumentos_de_exemplo(tmp_path)

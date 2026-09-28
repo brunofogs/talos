@@ -30,7 +30,14 @@ COLUNAS_PRATELEIRA = (
     "vencimento_meses", "carencia_meses", "liquidez_diaria", "tributacao",
     "classe", "risco", "coberto_fgc", "aplicacao_minima", "setor",
 )
-SETORES = ("financeiro", "governo_federal", "energia", "diversificado")
+SETORES = (
+    "financeiro", "governo_federal", "energia", "diversificado", "mineracao", "petroleo",
+    "varejo", "saude", "industria", "telecom", "agronegocio", "saneamento",
+)
+COLUNAS_ACOES = (
+    "ticker", "empresa", "conglomerado", "setor", "risco", "beta",
+    "volatilidade_propria_aa", "alfa_aa", "aplicacao_minima",
+)
 TEXTOS_SIM = frozenset({"sim", "s", "true", "1"})
 TEXTOS_NAO = frozenset({"não", "nao", "n", "false", "0"})
 
@@ -129,11 +136,22 @@ class Produto:
     coberto_fgc: bool
     aplicacao_minima: float
     setor: str
+    ticker: str | None = None
+    beta: float = 1.0
+    volatilidade_propria_aa: float = 0.0
+    alfa_aa: float = 0.0
 
     def __post_init__(self) -> None:
         """Confere se o produto usa categorias conhecidas e valores válidos."""
         contexto = f"produto '{self.nome}'"
         _exigir_opcao(self.setor, SETORES, f"{contexto}, setor")
+        _exigir(self.volatilidade_propria_aa >= 0, f"{contexto}: volatilidade_propria_aa não pode ser negativa.")
+        _exigir(self.alfa_aa > -1, f"{contexto}: alfa_aa precisa ser maior que -100%.")
+        if self.ticker is not None:
+            _exigir(
+                self.indexador == "variavel" and self.renda_variavel,
+                f"{contexto}: ação individual precisa ter indexador variavel e classe {CLASSE_RENDA_VARIAVEL}.",
+            )
         _exigir(bool(self.nome.strip()), "produto: o nome não pode ficar vazio.")
         _exigir_opcao(self.indexador, INDEXADORES, f"{contexto}, indexador")
         _exigir_opcao(self.tributacao, TRIBUTACOES, f"{contexto}, tributacao")
@@ -156,6 +174,11 @@ class Produto:
     def renda_variavel(self) -> bool:
         """Diz se o produto conta no teto de renda variável do perfil."""
         return self.classe == CLASSE_RENDA_VARIAVEL
+
+    @property
+    def acao_individual(self) -> bool:
+        """Diz se o produto é uma ação de uma empresa (e não um fundo ou ETF)."""
+        return self.ticker is not None
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +239,11 @@ class PremissasOtimizacao:
     prazo_minimo_risco_3_meses: int
     reamostragens: int
     limite_setor_do_trabalho: float
+    limite_por_acao: float
+    peso_minimo_por_produto: float
+    limite_por_conglomerado_na_meta: float
+    conglomerados_sem_limite: tuple[str, ...]
+    nivel_crescimento: float
 
 
 @dataclass(frozen=True)
@@ -305,6 +333,48 @@ def carregar_prateleira(caminho: Path) -> list[Produto]:
     nomes = [produto.nome for produto in produtos]
     _exigir(len(nomes) == len(set(nomes)), "prateleira: há produtos com o mesmo nome.")
     return produtos
+
+
+def carregar_acoes(caminho: Path) -> list[Produto]:
+    """Lê o CSV com a lista de ações aprovada pela área de análise da corretora.
+
+    Cada ação vira um `Produto` de renda variável, tributado como ações, com
+    liquidez diária e sem garantia do FGC. As colunas de risco vêm da análise:
+    - `beta`: quanto a ação acompanha a bolsa (1 = igual à bolsa);
+    - `volatilidade_propria_aa`: oscilação própria da empresa, além da bolsa;
+    - `alfa_aa`: retorno esperado a mais que a bolsa explica (ex.: pelo preço-alvo);
+    - `aplicacao_minima`: preço de uma ação (mercado fracionário).
+    """
+    acoes = []
+    for linha in ler_csv(caminho, COLUNAS_ACOES, "ações"):
+        ticker = (linha["ticker"] or "").strip()
+        empresa = (linha["empresa"] or "").strip()
+        contexto = f"ações, '{ticker}'"
+        _exigir(bool(ticker) and bool(empresa), "ações: toda linha precisa de ticker e empresa.")
+        acoes.append(Produto(
+            nome=f"{ticker} ({empresa})",
+            emissor=empresa,
+            conglomerado=(linha["conglomerado"] or "").strip() or empresa,
+            indexador="variavel",
+            taxa=0.0,
+            taxa_adm_aa=0.0,
+            vencimento_meses=None,
+            carencia_meses=0,
+            liquidez_diaria=True,
+            tributacao="acoes",
+            classe=CLASSE_RENDA_VARIAVEL,
+            risco=inteiro_csv(linha["risco"], f"{contexto}, risco"),
+            coberto_fgc=False,
+            aplicacao_minima=numero_csv(linha["aplicacao_minima"], f"{contexto}, aplicacao_minima"),
+            setor=(linha["setor"] or "").strip(),
+            ticker=ticker,
+            beta=numero_csv(linha["beta"], f"{contexto}, beta"),
+            volatilidade_propria_aa=numero_csv(linha["volatilidade_propria_aa"], f"{contexto}, volatilidade_propria_aa"),
+            alfa_aa=numero_csv(linha["alfa_aa"], f"{contexto}, alfa_aa"),
+        ))
+    tickers = [acao.ticker for acao in acoes]
+    _exigir(len(tickers) == len(set(tickers)), "ações: há tickers repetidos.")
+    return acoes
 
 
 def carregar_premissas(caminho: Path) -> Premissas:
@@ -489,6 +559,18 @@ def _ler_otimizacao(dados: Any) -> PremissasOtimizacao:
         limite_setor_do_trabalho=_fracao(
             _campo(dados, "limite_setor_do_trabalho", contexto), f"{contexto}, limite_setor_do_trabalho"
         ),
+        limite_por_acao=_fracao(_campo(dados, "limite_por_acao", contexto), f"{contexto}, limite_por_acao"),
+        peso_minimo_por_produto=_fracao(
+            _campo(dados, "peso_minimo_por_produto", contexto), f"{contexto}, peso_minimo_por_produto"
+        ),
+        limite_por_conglomerado_na_meta=_fracao(
+            _campo(dados, "limite_por_conglomerado_na_meta", contexto), f"{contexto}, limite_por_conglomerado_na_meta"
+        ),
+        conglomerados_sem_limite=tuple(
+            _texto(nome, f"{contexto}, conglomerados_sem_limite")
+            for nome in _lista(_campo(dados, "conglomerados_sem_limite", contexto), f"{contexto}, conglomerados_sem_limite")
+        ),
+        nivel_crescimento=_fracao(_campo(dados, "nivel_crescimento", contexto), f"{contexto}, nivel_crescimento"),
     )
     _exigir(0 < otimizacao.nivel_cvar < 1, f"{contexto}: nivel_cvar precisa estar entre 0 e 1.")
     _exigir(otimizacao.limite_por_produto > 0, f"{contexto}: limite_por_produto precisa ser positivo.")
@@ -596,6 +678,12 @@ def _campo(dados: dict[str, Any], chave: str, contexto: str) -> Any:
 def _texto(valor: Any, contexto: str) -> str:
     """Confere se o valor é texto."""
     _exigir(isinstance(valor, str), f"{contexto}: precisa ser um texto.")
+    return valor
+
+
+def _lista(valor: Any, contexto: str) -> list[Any]:
+    """Confere se o valor é uma lista."""
+    _exigir(isinstance(valor, list), f"{contexto}: precisa ser uma lista.")
     return valor
 
 

@@ -29,7 +29,7 @@
   },
   "perfis": {
     "conservador": {"risco_maximo": 2, "teto_renda_variavel": 0.00, "cvar_maximo": 0.02},
-    "moderado":    {"risco_maximo": 3, "teto_renda_variavel": 0.20, "cvar_maximo": 0.08},
+    "moderado":    {"risco_maximo": 4, "teto_renda_variavel": 0.20, "cvar_maximo": 0.08},
     "arrojado":    {"risco_maximo": 5, "teto_renda_variavel": 0.50, "cvar_maximo": 0.20}
   },
   "otimizacao": {
@@ -39,7 +39,12 @@
     "prazo_minimo_renda_variavel_meses": 36,
     "prazo_minimo_risco_3_meses": 24,
     "reamostragens": 50,
-    "limite_setor_do_trabalho": 0.30
+    "limite_setor_do_trabalho": 0.30,
+    "limite_por_acao": 0.10,
+    "peso_minimo_por_produto": 0.02,
+    "limite_por_conglomerado_na_meta": 0.50,
+    "conglomerados_sem_limite": ["Tesouro Nacional"],
+    "nivel_crescimento": 0.50
   },
   "cenarios": {
     "quantidade": 5000,

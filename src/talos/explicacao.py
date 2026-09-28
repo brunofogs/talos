@@ -13,7 +13,15 @@ from talos import AVISO_SIMULACAO
 from talos.fgc import UsoFGC, formatar_reais, somar_usos
 from talos.impostos import MESES_POR_ANO, TRIBUTACOES_COM_COME_COTAS, percentual_cdi_equivalente
 from talos.modelos import Meta, Premissas
-from talos.otimizador import ATINGIVEL, DIFICIL, Alocacao, Recomendacao, ResultadoMeta
+from talos.otimizador import (
+    ATINGIVEL,
+    CRESCIMENTO,
+    DIFICIL,
+    Alocacao,
+    Recomendacao,
+    ResultadoMeta,
+    limite_do_produto,
+)
 
 NOMES_DOS_MESES = (
     "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -24,6 +32,14 @@ NOMES_DOS_SETORES = {
     "governo_federal": "governo federal",
     "energia": "de energia",
     "diversificado": "diversificado",
+    "mineracao": "de mineração",
+    "petroleo": "de petróleo",
+    "varejo": "de varejo",
+    "saude": "de saúde",
+    "industria": "de indústria",
+    "telecom": "de telecomunicações",
+    "agronegocio": "de agronegócio",
+    "saneamento": "de saneamento",
 }
 PROBABILIDADE_MINIMA_EXIBIDA = 0.001
 TOLERANCIA_LIMITE = 1e-6
@@ -94,6 +110,12 @@ def explicar(recomendacao: Recomendacao, premissas: Premissas) -> Explicacao:
             "rendimento de qualquer produto desta carteira."
         )
     antes_de_tudo.extend(_frases_de_trabalho(recomendacao, premissas))
+    if recomendacao.estrategia == CRESCIMENTO:
+        antes_de_tudo.append(
+            "Estratégia de crescimento: em vez da carteira de menor risco que atinge cada meta, o Talos "
+            "buscou a que mais cresce nos cenários comuns (a média da metade pior dos cenários), sem "
+            "passar do risco nem do teto de renda variável do perfil."
+        )
     uso_acumulado: UsoFGC = {}
     metas = []
     for resultado in recomendacao.resultados:
@@ -230,6 +252,13 @@ def _frases_do_produto(
     if produto.carencia_meses > 0:
         frases.append(f"Tem carência de {formatar_prazo(produto.carencia_meses)}: o dinheiro fica preso nesse período.")
 
+    if produto.acao_individual:
+        frases.append(
+            f"É uma ação individual ({produto.ticker}, setor {NOMES_DOS_SETORES[produto.setor]}), da lista "
+            "aprovada pela área de análise da corretora. Oscila mais que um fundo ou ETF, porque depende "
+            "de uma empresa só."
+        )
+
     if produto.renda_variavel:
         frases.append(
             "É renda variável: o valor oscila e pode cair no caminho, por isso só entra em metas de "
@@ -252,11 +281,11 @@ def _frases_do_produto(
             "da meta, para não depender duas vezes do mesmo setor."
         )
 
-    sem_limite = produto.indexador in otimizacao.indexadores_sem_limite
-    if not sem_limite and alocacao.peso >= otimizacao.limite_por_produto - TOLERANCIA_LIMITE:
+    limite = limite_do_produto(produto, premissas)
+    if limite < 1 and alocacao.peso >= limite - TOLERANCIA_LIMITE:
+        unidade = "ação" if produto.acao_individual else "produto"
         frases.append(
-            f"Ficou no limite de {formatar_percentual(otimizacao.limite_por_produto, 0)} por produto, "
-            "para não concentrar demais."
+            f"Ficou no limite de {formatar_percentual(limite, 0)} por {unidade}, para não concentrar demais."
         )
     return frases
 

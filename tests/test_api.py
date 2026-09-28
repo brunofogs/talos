@@ -49,10 +49,12 @@ def test_saude(url: str) -> None:
 
 
 def test_prateleira(url: str) -> None:
-    """GET /prateleira devolve os 15 produtos, os perfis aceitos e o aviso."""
+    """GET /prateleira devolve os 15 produtos mais as 10 ações, os perfis, as estratégias e o aviso."""
     status, corpo = chamar(f"{url}/prateleira")
     assert status == 200
-    assert len(corpo["produtos"]) == 15
+    assert len(corpo["produtos"]) == 25
+    assert sum(1 for p in corpo["produtos"] if p["ticker"]) == 10
+    assert corpo["estrategias"] == ["menor_risco", "crescimento"]
     assert corpo["perfis"] == ["arrojado", "conservador", "moderado"]
     assert corpo["aviso"] == AVISO_SIMULACAO
 
@@ -81,6 +83,23 @@ def test_validacoes(url: str, cliente: dict) -> None:
     nomes = [c["carteira"] for c in corpo["metas"][1]["carteiras"]]
     assert nomes == ["Talos", "100% do CDI", "Pesos iguais"]
     assert corpo["metas"][1]["conclusao"]
+
+
+def test_estrategia_crescimento_na_url(url: str, cliente: dict) -> None:
+    """?estrategia=crescimento com perfil arrojado devolve ações, com ticker e setor, na aposentadoria."""
+    arrojado = {**cliente, "perfil": "arrojado"}
+    status, corpo = chamar(f"{url}/recomendacoes{POUCOS_CENARIOS}&estrategia=crescimento", "POST", arrojado)
+    assert (status, corpo["estrategia"]) == (200, "crescimento")
+    aposentadoria = next(m for m in corpo["metas"] if m["nome"] == "Aposentadoria")
+    acoes = [item for item in aposentadoria["carteira"] if item["ticker"]]
+    assert acoes and all(item["setor"] for item in acoes)
+
+
+def test_estrategia_invalida_na_url(url: str, cliente: dict) -> None:
+    """Estratégia desconhecida volta como 400 com as opções válidas."""
+    status, corpo = chamar(f"{url}/recomendacoes{POUCOS_CENARIOS}&estrategia=agressiva", "POST", cliente)
+    assert status == 400
+    assert "menor_risco, crescimento" in corpo["erro"]
 
 
 def test_semente_na_url(url: str, cliente: dict) -> None:
@@ -149,7 +168,7 @@ def test_testar_api_mostra_a_resposta_inteira(url: str) -> None:
     """O cliente de teste chama as três rotas e mostra o JSON da recomendação como chegou."""
     texto = conversa_de_teste(url, EXEMPLOS / "cliente.json", cenarios=500)
     assert f"GET {url}/saude -> 200" in texto
-    assert "15 produtos" in texto
+    assert "25 produtos" in texto
     assert f"POST {url}/recomendacoes?cenarios=500" in texto
     corpo = json.loads(texto[texto.index("{\n"):])
     assert len(corpo["metas"]) == 4

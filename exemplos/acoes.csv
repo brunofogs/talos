@@ -1,0 +1,14 @@
+# Dados fictícios: empresas e tickers inventados (terminados em -F), só para testar o Talos. Não são ações reais.
+# A lista real deve vir da área de análise da corretora. beta = quanto acompanha a bolsa; volatilidade_propria_aa = oscilação própria da empresa;
+# alfa_aa = retorno esperado além do que a bolsa explica (da análise); aplicacao_minima = preço de uma ação (mercado fracionário)
+ticker,empresa,conglomerado,setor,risco,beta,volatilidade_propria_aa,alfa_aa,aplicacao_minima
+AURA-F,Banco Aurora,Conglomerado Aurora,financeiro,4,1.10,0.22,0.010,32.50
+BORE-F,Banco Boreal,Conglomerado Boreal,financeiro,4,1.20,0.28,0.020,18.40
+SOLR-F,Energia Sol,Grupo Sol,energia,4,0.70,0.18,0.015,41.20
+SANE-F,Águas do Vale,Águas do Vale,saneamento,4,0.60,0.17,0.010,27.90
+TELE-F,Telecom Norte,Telecom Norte,telecom,4,0.60,0.16,0.000,12.30
+SAUD-F,Saúde Integrada,Saúde Integrada,saude,4,0.80,0.24,0.010,22.10
+AGRO-F,Agro Cerrado,Agro Cerrado,agronegocio,4,0.90,0.26,0.020,15.70
+MINR-F,Mineradora Serra Alta,Mineradora Serra Alta,mineracao,5,1.10,0.30,0.020,58.60
+OLEO-F,Óleo do Atlântico,Óleo do Atlântico,petroleo,5,1.20,0.32,0.025,36.80
+VARE-F,Varejo Popular,Varejo Popular,varejo,5,1.30,0.38,0.030,9.80

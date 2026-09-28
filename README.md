@@ -77,9 +77,53 @@ Opções:
 | `--semente N` | outra semente para os cenários (padrão: a das premissas) |
 | `--reamostragem` | usa a reamostragem de Michaud (bem mais lento) |
 | `--saidas PASTA` | onde gravar o registro de auditoria |
+| `--acoes ARQUIVO` | lista de ações da corretora (padrão: `acoes.csv` na pasta da prateleira, se existir) |
+| `--estrategia` | `menor_risco` (padrão) ou `crescimento` |
 
 Se algum arquivo faltar ou tiver dados inválidos, o programa explica o
 problema em português e termina com código 2.
+
+## Ações individuais
+
+Além da prateleira, o Talos pode usar uma **lista de ações** (`acoes.csv`). Essa
+lista precisa vir da **área de análise da corretora**: o Talos não escolhe quais
+ações entram, só decide quanto colocar em cada uma, conforme o perfil e as
+metas do cliente. As regras:
+
+- ações só entram em metas de 3 anos ou mais e só para perfis que aceitam o
+  risco delas (risco 4 ou 5);
+- cada ação fica com no máximo 10% da meta, e a renda variável somada respeita
+  o teto do perfil;
+- quem trabalha numa empresa da lista não recebe a ação dela, e o setor do
+  trabalho continua limitado;
+- nenhum grupo (fora o Tesouro Nacional) passa de 50% da meta, e nenhum produto
+  entra com menos de 2% da meta.
+
+| Coluna do `acoes.csv` | O que é |
+|---|---|
+| `ticker`, `empresa`, `conglomerado`, `setor` | identificação; `conglomerado` vazio = a própria empresa |
+| `risco` | de 1 a 5, na escala da prateleira |
+| `beta` | quanto a ação acompanha a bolsa (1 = igual à bolsa) |
+| `volatilidade_propria_aa` | oscilação própria da empresa, além da bolsa, ao ano |
+| `alfa_aa` | retorno esperado além do que a bolsa explica (ex.: a partir do preço-alvo da análise) |
+| `aplicacao_minima` | preço de uma ação (mercado fracionário) |
+
+As ações de `exemplos/acoes.csv` são **fictícias** (tickers terminados em
+`-F`).
+
+> **Atenção:** indicar ações reais a investidores é atividade regulada pela CVM
+> (analista de valores mobiliários e consultoria). Com a lista real da
+> corretora, use o Talos internamente (linha de comando ou `servir`), sob a
+> responsabilidade da área de análise, e **não** publique essa versão em
+> página aberta.
+
+**Estratégias** (`--estrategia`, `?estrategia=` na API ou a escolha na página):
+
+- `menor_risco` (padrão): a carteira de menor perda nos piores cenários que
+  atinge a meta. Ações só entram se ajudarem a reduzir o risco.
+- `crescimento`: a carteira que mais cresce nos cenários comuns (a média da
+  metade pior dos cenários), dentro do risco aceito pelo perfil. Ela não
+  persegue as ações que só vão bem em poucos cenários de sorte.
 
 ## API para corretoras
 
@@ -173,7 +217,8 @@ alíquotas são frações (0.15 = 15%).
 | `cliente.json` | perfil (`conservador`, `moderado` ou `arrojado`), renda, dívidas caras e metas (valor atual, valor-alvo, prazo em meses, se é reserva de emergência) |
 | `prateleira.csv` | um produto por linha: emissor, conglomerado, indexador e taxa, vencimento e carência em meses (vazio = sem vencimento), liquidez diária (`sim`/`não`), tributação, classe, risco de 1 a 5, cobertura do FGC e aplicação mínima |
 | `curva_di.csv` | vértices da curva de DI futuro: dias úteis e taxa ao ano |
-| `premissas.json` | juro real, tabelas de IR, come-cotas, limites do FGC, limites de cada perfil, parâmetros do otimizador e dos cenários |
+| `acoes.csv` | opcional: lista de ações aprovada pela análise da corretora (veja "Ações individuais") |
+| `premissas.json` | juro real, tabelas de IR, come-cotas, limites do FGC, limites de cada perfil, parâmetros do otimizador (limites por produto, por ação e por grupo, peso mínimo) e dos cenários |
 
 Na prateleira, o significado de `taxa` depende do `indexador`: `cdi` é
 fração do CDI (1.10 = 110% do CDI); `selic` e `ipca` são o spread ao ano;
@@ -182,6 +227,6 @@ cenários).
 
 ## Estado atual
 
-As 8 etapas do CLAUDE.md estão concluídas, mais a regra de emprego
-(empregador fora da carteira e teto para o setor de trabalho), o protótipo web
-e a API para corretoras (`servir` e `testar-api`).
+As 8 etapas do CLAUDE.md estão concluídas, mais a regra de emprego, o protótipo
+web, a API para corretoras (`servir` e `testar-api`) e as ações individuais com
+a estratégia de crescimento.

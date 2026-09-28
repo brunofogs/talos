@@ -21,9 +21,9 @@ def ponte():
 
 
 def test_dados_da_prateleira(ponte) -> None:
-    """A página recebe os 15 produtos, os perfis e o cliente de exemplo (sem o campo de aviso)."""
+    """A página recebe os 15 produtos e as 10 ações, os perfis e o cliente de exemplo (sem o campo de aviso)."""
     dados = json.loads(ponte.dados_da_prateleira(RAIZ / "exemplos"))
-    assert len(dados["produtos"]) == 15
+    assert len(dados["produtos"]) == 25
     assert set(dados["perfis"]) == {"conservador", "moderado", "arrojado"}
     assert dados["cdi_12_meses"] == pytest.approx(0.14)
     assert "_aviso" not in dados["cliente_exemplo"]

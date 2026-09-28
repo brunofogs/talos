@@ -40,11 +40,12 @@ from talos.modelos import (
     ErroDeDados,
     Premissas,
     Produto,
+    carregar_acoes,
     carregar_prateleira,
     carregar_premissas,
     cliente_de_dados,
 )
-from talos.otimizador import Recomendacao, otimizar_cliente
+from talos.otimizador import ESTRATEGIAS, MENOR_RISCO, Recomendacao, otimizar_cliente
 from talos.validacao import conclusao, validar
 
 HOST_PADRAO = "127.0.0.1"
@@ -53,6 +54,7 @@ TAMANHO_MAXIMO_CORPO = 1_000_000  # 1 MB: um cliente com dezenas de metas cabe c
 LIMITE_DESCARTE = 10 * TAMANHO_MAXIMO_CORPO  # corpo grande demais é lido e jogado fora até aqui
 PEDACO_DESCARTE = 65_536
 PARAMETROS_INTEIROS = ("cenarios", "semente")
+PARAMETROS_TEXTO = ("estrategia",)
 TEMPO_LIMITE_TESTE = 300  # segundos para o testar-api esperar uma resposta
 
 
@@ -75,13 +77,14 @@ class Motor:
 
 
 def carregar_motor(pasta_dados: Path, pasta_saidas: Path) -> Motor:
-    """Lê premissas, curva e prateleira da pasta de dados."""
+    """Lê premissas, curva, prateleira e, se existir, a lista de ações (`acoes.csv`) da pasta de dados."""
     pasta_dados = Path(pasta_dados)
     premissas = carregar_premissas(pasta_dados / "premissas.json")
+    acoes = carregar_acoes(pasta_dados / "acoes.csv") if (pasta_dados / "acoes.csv").exists() else []
     return Motor(
         premissas=premissas,
         curva=carregar_curva_di(pasta_dados / "curva_di.csv", premissas),
-        produtos=tuple(carregar_prateleira(pasta_dados / "prateleira.csv")),
+        produtos=tuple(carregar_prateleira(pasta_dados / "prateleira.csv") + acoes),
         pasta_saidas=Path(pasta_saidas),
     )
 
@@ -100,14 +103,18 @@ def resposta_prateleira(motor: Motor) -> dict[str, Any]:
     return {
         "data_referencia": motor.premissas.data_referencia.isoformat(),
         "perfis": sorted(motor.premissas.perfis),
+        "estrategias": list(ESTRATEGIAS),
         "produtos": [asdict(produto) for produto in motor.produtos],
         "aviso": AVISO_SIMULACAO,
     }
 
 
-def resposta_recomendacao(motor: Motor, dados_cliente: Any, cenarios: int | None = None, semente: int | None = None) -> dict[str, Any]:
+def resposta_recomendacao(
+    motor: Motor, dados_cliente: Any, cenarios: int | None = None, semente: int | None = None,
+    estrategia: str = MENOR_RISCO,
+) -> dict[str, Any]:
     """Otimiza as metas do cliente, grava a auditoria e devolve a recomendação em JSON."""
-    recomendacao = _otimizar(motor, dados_cliente, cenarios, semente)
+    recomendacao = _otimizar(motor, dados_cliente, cenarios, semente, estrategia)
     explicacao = explicar(recomendacao, motor.premissas)
     caminho = registrar(recomendacao, explicacao, motor.produtos, motor.curva, motor.premissas, motor.pasta_saidas)
     metas = []
@@ -130,6 +137,8 @@ def resposta_recomendacao(motor: Motor, dados_cliente: Any, cenarios: int | None
             "carteira": [
                 {
                     "produto": alocacao.produto.nome,
+                    "ticker": alocacao.produto.ticker,
+                    "setor": alocacao.produto.setor,
                     "emissor": alocacao.produto.emissor,
                     "conglomerado": alocacao.produto.conglomerado,
                     "peso": alocacao.peso,
@@ -149,15 +158,19 @@ def resposta_recomendacao(motor: Motor, dados_cliente: Any, cenarios: int | None
         "perfil": recomendacao.perfil.nome,
         "semente": recomendacao.semente,
         "cenarios": cenarios or motor.premissas.cenarios.quantidade,
+        "estrategia": recomendacao.estrategia,
         "antes_de_tudo": list(explicacao.antes_de_tudo),
         "metas": metas,
         "aviso": explicacao.aviso,
     }
 
 
-def resposta_validacao(motor: Motor, dados_cliente: Any, cenarios: int | None = None, semente: int | None = None) -> dict[str, Any]:
+def resposta_validacao(
+    motor: Motor, dados_cliente: Any, cenarios: int | None = None, semente: int | None = None,
+    estrategia: str = MENOR_RISCO,
+) -> dict[str, Any]:
     """Compara, meta a meta, o Talos com 100% do CDI e com pesos iguais."""
-    recomendacao = _otimizar(motor, dados_cliente, cenarios, semente)
+    recomendacao = _otimizar(motor, dados_cliente, cenarios, semente, estrategia)
     comparacoes = validar(recomendacao, motor.produtos, motor.premissas, motor.curva, cenarios)
     return {
         "versao_talos": __version__,
@@ -178,14 +191,17 @@ def resposta_validacao(motor: Motor, dados_cliente: Any, cenarios: int | None = 
     }
 
 
-def _otimizar(motor: Motor, dados_cliente: Any, cenarios: int | None, semente: int | None) -> Recomendacao:
+def _otimizar(
+    motor: Motor, dados_cliente: Any, cenarios: int | None, semente: int | None, estrategia: str = MENOR_RISCO
+) -> Recomendacao:
     """Valida o cliente e otimiza todas as metas."""
     cliente = cliente_de_dados(dados_cliente)
     motor.premissas.perfil(cliente.perfil)
     if cenarios is not None and cenarios < 1:
         raise ErroDeDados("cenarios precisa ser de pelo menos 1.")
     return otimizar_cliente(
-        cliente, motor.produtos, motor.premissas, motor.curva, semente=semente, quantidade=cenarios
+        cliente, motor.produtos, motor.premissas, motor.curva, semente=semente, quantidade=cenarios,
+        estrategia=estrategia,
     )
 
 
@@ -298,12 +314,16 @@ class ManipuladorTalos(BaseHTTPRequestHandler):
         sys.stderr.write(f"[{datetime.now():%d/%m/%Y %H:%M:%S}] {self.address_string()} {formato % argumentos}\n")
 
 
-def _parametros(consulta: str) -> dict[str, int]:
-    """Lê `cenarios` e `semente` da URL (ex.: ?cenarios=1000&semente=7)."""
-    parametros = {}
+def _parametros(consulta: str) -> dict[str, int | str]:
+    """Lê `cenarios`, `semente` e `estrategia` da URL (ex.: ?cenarios=1000&estrategia=crescimento)."""
+    parametros: dict[str, int | str] = {}
     for nome, valores in parse_qs(consulta).items():
+        if nome in PARAMETROS_TEXTO:
+            parametros[nome] = valores[-1]
+            continue
         if nome not in PARAMETROS_INTEIROS:
-            raise ErroDaRequisicao(HTTPStatus.BAD_REQUEST, f"Parâmetro '{nome}' desconhecido. Use: {', '.join(PARAMETROS_INTEIROS)}.")
+            aceitos = ", ".join(PARAMETROS_INTEIROS + PARAMETROS_TEXTO)
+            raise ErroDaRequisicao(HTTPStatus.BAD_REQUEST, f"Parâmetro '{nome}' desconhecido. Use: {aceitos}.")
         try:
             parametros[nome] = int(valores[-1])
         except ValueError as erro:
@@ -364,14 +384,16 @@ def chamar(url: str, metodo: str = "GET", corpo: Any = None) -> tuple[int, Any]:
         return erro.code, json.loads(erro.read().decode("utf-8"))
 
 
-def testar_api(url_base: str, caminho_cliente: Path, cenarios: int | None = None) -> str:
+def testar_api(url_base: str, caminho_cliente: Path, cenarios: int | None = None, estrategia: str | None = None) -> str:
     """Chama /saude, /prateleira e /recomendacoes como uma corretora faria e devolve o que aconteceu.
 
     A resposta de /recomendacoes aparece inteira, em JSON, exatamente como chega.
     """
     url_base = url_base.rstrip("/")
     cliente = json.loads(Path(caminho_cliente).read_text(encoding="utf-8"))
-    consulta = f"?cenarios={cenarios}" if cenarios else ""
+    opcoes = [f"cenarios={cenarios}"] if cenarios else []
+    opcoes += [f"estrategia={estrategia}"] if estrategia else []
+    consulta = "?" + "&".join(opcoes) if opcoes else ""
     linhas = []
 
     status, saude = chamar(f"{url_base}/saude")

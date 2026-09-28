@@ -232,6 +232,25 @@ button, input, select { font: inherit; color: inherit; }
 .botao-principal:disabled { opacity: 0.55; cursor: progress; }
 .erro-form { color: var(--crit); font-size: 13.5px; }
 .nota-campo { font-size: 12.5px; color: var(--muted); margin-top: -8px; }
+.escolhas { display: grid; gap: 8px; margin-top: -8px; }
+.escolha {
+  display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--surface);
+}
+.escolha:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.escolha input { margin-top: 3px; accent-color: var(--accent); flex: none; }
+.escolha span { display: grid; gap: 2px; font-size: 13px; color: var(--ink-2); }
+.escolha strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.acoes-meta { display: grid; gap: 8px; }
+.fichas { display: flex; flex-wrap: wrap; gap: 8px; }
+.ficha {
+  display: grid; gap: 1px; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface-2); min-width: 120px;
+}
+.ficha .ticker { font-family: var(--fonte-dados); font-weight: 500; font-size: 14px; color: var(--ink); }
+.ficha .empresa { font-size: 12px; color: var(--muted); }
+.ficha .quanto { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.nota-acoes { font-size: 12.5px; color: var(--muted); max-width: 72ch; }
 
 /* Resultados */
 .resultados { display: grid; gap: 20px; min-width: 0; }
@@ -447,6 +466,14 @@ table.prateleira td.n { text-align: right; font-family: var(--fonte-dados); }
           <option value="financeiro">Financeiro (bancos)</option>
           <option value="governo_federal">Governo federal</option>
           <option value="energia">Energia</option>
+          <option value="mineracao">Mineração</option>
+          <option value="petroleo">Petróleo</option>
+          <option value="varejo">Varejo</option>
+          <option value="saude">Saúde</option>
+          <option value="industria">Indústria</option>
+          <option value="telecom">Telecomunicações</option>
+          <option value="agronegocio">Agronegócio</option>
+          <option value="saneamento">Saneamento</option>
         </select>
       </div>
     </div>
@@ -459,10 +486,24 @@ table.prateleira td.n { text-align: right; font-family: var(--fonte-dados); }
     <button type="button" class="botao-sec" id="adicionar-meta">+ Adicionar meta</button>
 
     <div class="campo">
+      <span class="rotulo">Como montar a carteira</span>
+    </div>
+    <div class="escolhas" role="radiogroup" aria-label="Estratégia">
+      <label class="escolha" for="estrategia-menor-risco">
+        <input type="radio" name="estrategia" id="estrategia-menor-risco" value="menor_risco" checked>
+        <span><strong>Menor risco para atingir a meta</strong>O mínimo de oscilação que ainda chega ao valor desejado. Ações só entram se ajudarem a reduzir o risco.</span>
+      </label>
+      <label class="escolha" for="estrategia-crescimento">
+        <input type="radio" name="estrategia" id="estrategia-crescimento" value="crescimento">
+        <span><strong>Crescimento dentro do meu perfil</strong>Busca crescer mais nos cenários comuns, com ações até o limite do perfil (metas de 3 anos ou mais).</span>
+      </label>
+    </div>
+
+    <div class="campo">
       <label for="cenarios">Precisão da simulação</label>
       <select id="cenarios">
-        <option value="1000">Rápida: 1.000 cenários</option>
-        <option value="5000" selected>Completa: 5.000 cenários</option>
+        <option value="1000" selected>Rápida: 1.000 cenários</option>
+        <option value="2000">Completa: 2.000 cenários (mais lenta)</option>
       </select>
     </div>
     <p class="erro-form" id="erro-form" hidden></p>
@@ -514,7 +555,11 @@ const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 const moedaCentavos = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const pct = (x, casas = 1) => (x * 100).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }) + "%";
 const NOMES_CLASSE = { pos_fixado: "Pós-fixado", prefixado: "Prefixado", inflacao: "Inflação", acoes: "Ações" };
-const NOMES_SETOR = { financeiro: "Financeiro", governo_federal: "Governo federal", energia: "Energia", diversificado: "Diversificado" };
+const NOMES_SETOR = {
+  financeiro: "Financeiro", governo_federal: "Governo federal", energia: "Energia", diversificado: "Diversificado",
+  mineracao: "Mineração", petroleo: "Petróleo", varejo: "Varejo", saude: "Saúde", industria: "Indústria",
+  telecom: "Telecomunicações", agronegocio: "Agronegócio", saneamento: "Saneamento",
+};
 const NOMES_SITUACAO = { atingivel: "Atingível", dificil: "Difícil", sem_solucao: "Sem solução" };
 const ICONES_SITUACAO = {
   atingivel: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3 3 7-7"/></svg>',
@@ -579,6 +624,7 @@ function lerFormulario() {
     perfil: document.getElementById("perfil").value,
     renda_mensal: Number(document.getElementById("renda").value) || 0,
     dividas_caras: document.getElementById("dividas").checked,
+    estrategia: document.querySelector('input[name="estrategia"]:checked').value,
     empregador: document.getElementById("empregador").value || null,
     setor_trabalho: document.getElementById("setor").value || null,
     metas,
@@ -653,6 +699,24 @@ function ligarDica(conteiner, meta) {
 }
 
 /* ---------- Cartões de resultado ---------- */
+function blocoAcoes(meta) {
+  const acoes = meta.alocacoes.filter((a) => a.ticker);
+  if (!acoes.length) return "";
+  const total = acoes.reduce((soma, a) => soma + a.peso, 0);
+  return `
+    <div class="acoes-meta">
+      <span class="rotulo">Ações escolhidas nesta meta · ${pct(total)} do valor</span>
+      <div class="fichas">${acoes.map((a) => `
+        <div class="ficha">
+          <span class="ticker">${esc(a.ticker)}</span>
+          <span class="empresa">${esc(a.emissor)} · ${NOMES_SETOR[a.setor]}</span>
+          <span class="quanto">${pct(a.peso)} · ${moedaCentavos.format(a.valor)}</span>
+        </div>`).join("")}
+      </div>
+      <p class="nota-acoes">As ações vêm da lista aprovada pela área de análise da corretora; o Talos só decide quanto colocar em cada uma, no máximo 10% da meta por ação. Nesta demonstração, empresas e tickers são fictícios (terminam em -F).</p>
+    </div>`;
+}
+
 function cartaoMeta(meta) {
   const cartao = document.createElement("article");
   cartao.className = "cartao";
@@ -679,6 +743,7 @@ function cartaoMeta(meta) {
         </div>
         <div class="legenda">${classes.map((c) => `<span><i style="background:var(--serie-${c})"></i>${NOMES_CLASSE[c]}</span>`).join("")}</div>
       </div>
+      ${blocoAcoes(meta)}
       <div class="produtos">
         ${meta.alocacoes.map((a) => `
           <details class="produto">
@@ -716,13 +781,15 @@ function mostrarResultado(resultado, segundos, quantidade) {
   info.className = "faixa-info";
   const atingiveis = resultado.metas.filter((m) => m.situacao === "atingivel").length;
   info.innerHTML = `<span><strong>${atingiveis} de ${resultado.metas.length}</strong> metas atingíveis no perfil ${esc(resultado.perfil)}</span>
-    <span class="numero">${quantidade.toLocaleString("pt-BR")} cenários · semente ${resultado.semente} · calculado em ${segundos.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} s no navegador</span>`;
+    <span class="numero">${quantidade.toLocaleString("pt-BR")} cenários · estratégia ${resultado.estrategia === "crescimento" ? "crescimento" : "menor risco"} · semente ${resultado.semente} · calculado em ${segundos.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} s no navegador</span>`;
   area.appendChild(info);
   for (const frase of resultado.antes_de_tudo) {
     const sobreEmprego = frase.startsWith("Como o cliente trabalha");
+    const sobreEstrategia = frase.startsWith("Estratégia de crescimento");
     const alerta = document.createElement("div");
-    alerta.className = sobreEmprego ? "alerta neutro" : "alerta";
-    alerta.innerHTML = `<strong>${sobreEmprego ? "Emprego" : "Antes de tudo"}</strong><span>${esc(frase)}</span>`;
+    alerta.className = sobreEmprego || sobreEstrategia ? "alerta neutro" : "alerta";
+    const titulo = sobreEmprego ? "Emprego" : sobreEstrategia ? "Estratégia" : "Antes de tudo";
+    alerta.innerHTML = `<strong>${titulo}</strong><span>${esc(frase)}</span>`;
     area.appendChild(alerta);
   }
   resultado.metas.forEach((m) => area.appendChild(cartaoMeta(m)));
@@ -735,7 +802,7 @@ function mostrarPrateleira(dados) {
     if (p.indexador === "selic") return `Selic + ${pct(p.taxa, 2)}`;
     if (p.indexador === "prefixado") return `${pct(p.taxa)} a.a.`;
     if (p.indexador === "ipca") return `IPCA + ${pct(p.taxa)}`;
-    return "Variável";
+    return p.ticker ? `Ação (beta ${p.beta.toLocaleString("pt-BR")})` : "Variável";
   };
   const ir = { regressivo: "Regressivo", isento: "Isento", acoes: "15% (ações)", fundo_longo_prazo: "Come-cotas LP", fundo_curto_prazo: "Come-cotas CP" };
   document.querySelector("#tabela-prateleira tbody").innerHTML = dados.produtos.map((p) => `<tr>
@@ -760,7 +827,7 @@ const erroForm = document.getElementById("erro-form");
 const luz = document.getElementById("luz");
 const estadoTexto = document.getElementById("estado-texto");
 const ordemEtapas = ["python", "pacotes", "talos", "calculo"];
-let quantidadePedida = 5000;
+let quantidadePedida = 1000;
 
 function marcarEtapa(etapa) {
   const atual = ordemEtapas.indexOf(etapa);

@@ -36,7 +36,7 @@ ARQUIVOS_PYODIDE = (
     "scipy-1.14.1-cp312-cp312-pyodide_2024_0_wasm32.whl",
 )
 ARQUIVOS_DA_PAGINA = ("index.html", "motor.js", "ponte.py")
-ARQUIVOS_DE_EXEMPLO = ("cliente.json", "prateleira.csv", "curva_di.csv", "premissas.json")
+ARQUIVOS_DE_EXEMPLO = ("cliente.json", "prateleira.csv", "acoes.csv", "curva_di.csv", "premissas.json")
 
 
 def copiar_codigo() -> list[str]:

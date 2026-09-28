@@ -28,7 +28,7 @@ from scipy.optimize import linprog
 from talos.fgc import RestricaoLinear, UsoFGC, restricoes_fgc, somar_usos
 from talos.impostos import MESES_POR_ANO, retorno_liquido_anualizado
 from talos.mercado import Cenarios, CurvaDI, gerar_cenarios, retorno_antes_do_ir
-from talos.modelos import RISCO_MINIMO, Cliente, Meta, Perfil, Premissas, Produto
+from talos.modelos import RISCO_MINIMO, Cliente, ErroDeDados, Meta, Perfil, Premissas, Produto
 
 Matriz = npt.NDArray[np.float64]
 Vetor = npt.NDArray[np.float64]
@@ -42,6 +42,10 @@ PERCENTIS_VALOR_FINAL = (5, 25, 50, 75, 95)
 ATINGIVEL = "atingivel"
 DIFICIL = "dificil"
 SEM_SOLUCAO = "sem_solucao"
+
+MENOR_RISCO = "menor_risco"
+CRESCIMENTO = "crescimento"
+ESTRATEGIAS = (MENOR_RISCO, CRESCIMENTO)
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +111,7 @@ class Recomendacao:
     uso_fgc: UsoFGC
     semente: int
     reamostragem: bool
+    estrategia: str = MENOR_RISCO
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +287,46 @@ def maximizar_retorno(problema: ProblemaCarteira, cvar_maximo: float) -> Vetor |
     return _resolver(problema, custo, [teto_cvar])
 
 
+def maximizar_crescimento(problema: ProblemaCarteira, cvar_maximo: float, nivel_tipico: float) -> Vetor | None:
+    """Pesos que maximizam a média dos piores `1 - nivel_tipico` dos cenários, com CVaR até `cvar_maximo`.
+
+    Com `nivel_tipico` = 0,5, maximiza a média da metade pior dos cenários:
+    premia carteiras que crescem de forma consistente, e não as que só vão bem
+    em poucos cenários de sorte. São dois blocos de Rockafellar-Uryasev: um
+    para o teto de risco (nível do problema) e outro para o objetivo.
+    Variáveis: pesos w, (a1, u1) do teto e (a2, u2) do objetivo.
+    """
+    quantidade, n = problema.fatores.shape
+    zeros = np.zeros(quantidade)
+    peso_teto = _peso_excesso(problema)
+    peso_objetivo = 1 / ((1 - nivel_tipico) * quantidade)
+    custo = np.concatenate([np.zeros(n), [0.0], zeros, [1.0], np.full(quantidade, peso_objetivo)])
+
+    cenarios_negativos = sparse.csr_matrix(-problema.fatores)
+    menos_um = sparse.csr_matrix(-np.ones((quantidade, 1)))
+    identidade = -sparse.identity(quantidade, format="csr")
+    vazio_coluna = sparse.csr_matrix((quantidade, 1))
+    vazio_bloco = sparse.csr_matrix((quantidade, quantidade))
+    bloco_teto = sparse.hstack([cenarios_negativos, menos_um, identidade, vazio_coluna, vazio_bloco])
+    bloco_objetivo = sparse.hstack([cenarios_negativos, vazio_coluna, vazio_bloco, menos_um, identidade])
+
+    tamanho_extra = 2 + 2 * quantidade
+    linhas = [(np.concatenate([r.coeficientes, np.zeros(tamanho_extra)]), r.limite) for r in problema.restricoes]
+    linhas.append((np.concatenate([np.zeros(n), [1.0], np.full(quantidade, peso_teto), [0.0], zeros]), cvar_maximo))
+    a_ub = sparse.vstack([bloco_teto, bloco_objetivo, sparse.csr_matrix(np.array([l for l, _ in linhas]))])
+    b_ub = np.concatenate([-np.ones(2 * quantidade), [limite for _, limite in linhas]])
+    a_eq = sparse.csr_matrix(np.concatenate([np.ones(n), np.zeros(tamanho_extra)])[None, :])
+    limites = (
+        [(0.0, float(teto)) for teto in problema.limites_superiores]
+        + [(None, None)] + [(0.0, None)] * quantidade
+        + [(None, None)] + [(0.0, None)] * quantidade
+    )
+    resultado = linprog(custo, A_ub=a_ub.tocsr(), b_ub=b_ub, A_eq=a_eq, b_eq=[1.0], bounds=limites, method="highs")
+    if resultado.status != 0:
+        return None
+    return _limpar_pesos(resultado.x[:n])
+
+
 def _peso_excesso(problema: ProblemaCarteira) -> float:
     """Peso de cada excesso de perda na fórmula do CVaR: 1 / ((1 - nível) * S)."""
     return 1 / ((1 - problema.nivel_cvar) * problema.fatores.shape[0])
@@ -339,8 +384,16 @@ def otimizar_meta(
     quantidade: int | None = None,
     empregador: str | None = None,
     setor_trabalho: str | None = None,
+    estrategia: str = MENOR_RISCO,
 ) -> ResultadoMeta:
     """Monta a carteira de uma meta.
+
+    Estratégias:
+    - `menor_risco` (padrão): a carteira de menor CVaR que chega ao valor-alvo;
+      se não houver, a de maior retorno dentro do risco do perfil (meta difícil);
+    - `crescimento`: a carteira que mais cresce nos cenários comuns: maximiza a
+      média dos piores 50% dos cenários (nível das premissas), dentro do risco
+      aceito pelo perfil. Não aposta nos poucos cenários de muita sorte.
 
     `uso_fgc` é o quanto das garantias do FGC as metas anteriores já usaram.
     Os produtos do `empregador` (conglomerado) ficam fora da carteira, e os do
@@ -348,6 +401,8 @@ def otimizar_meta(
     Com `reamostragem=True`, a carteira é a média das carteiras ótimas em
     várias reamostragens dos cenários (reamostragem de Michaud).
     """
+    if estrategia not in ESTRATEGIAS:
+        raise ErroDeDados(f"estratégia '{estrategia}' não reconhecida. Use: {', '.join(ESTRATEGIAS)}.")
     uso_fgc = uso_fgc or {}
     semente = premissas.cenarios.semente if semente is None else semente
     necessario = retorno_necessario_aa(meta)
@@ -379,9 +434,19 @@ def otimizar_meta(
     def maior_retorno(indices: list[int], fatores_usados: Matriz) -> Vetor | None:
         return maximizar_retorno(problema(indices, fatores_usados), perfil.cvar_maximo)
 
-    minimos = np.array([p.aplicacao_minima / meta.valor_atual for p in elegiveis])
-    situacao, resolvedor = ATINGIVEL, menor_risco
-    solucao = _com_aplicacao_minima(lambda indices: menor_risco(indices, fatores), minimos)
+    def mais_crescimento(indices: list[int], fatores_usados: Matriz) -> Vetor | None:
+        return maximizar_crescimento(
+            problema(indices, fatores_usados), perfil.cvar_maximo, premissas.otimizacao.nivel_crescimento
+        )
+
+    peso_minimo = premissas.otimizacao.peso_minimo_por_produto
+    minimos = np.array([max(p.aplicacao_minima / meta.valor_atual, peso_minimo) for p in elegiveis])
+    if estrategia == CRESCIMENTO:
+        situacao, resolvedor = ATINGIVEL, mais_crescimento
+        solucao = _com_aplicacao_minima(lambda indices: mais_crescimento(indices, fatores), minimos)
+    else:
+        situacao, resolvedor = ATINGIVEL, menor_risco
+        solucao = _com_aplicacao_minima(lambda indices: menor_risco(indices, fatores), minimos)
     if solucao is None:
         situacao, resolvedor = DIFICIL, maior_retorno
         solucao = _com_aplicacao_minima(lambda indices: maior_retorno(indices, fatores), minimos)
@@ -397,6 +462,9 @@ def otimizar_meta(
         solucao = reamostrada or solucao
 
     indices, pesos = solucao
+    if resolvedor is mais_crescimento:
+        chega_ao_alvo = np.mean(fatores[:, indices] @ pesos) >= fator_alvo - TOLERANCIA_NUMERICA
+        situacao = ATINGIVEL if chega_ao_alvo else DIFICIL
     return _resultado(
         meta, situacao, elegiveis, indices, pesos, fatores, crescimento, tuple(excluidos),
         necessario, cenarios, nivel, semente, reamostragem,
@@ -415,20 +483,33 @@ def _montar_problema(
 ) -> ProblemaCarteira:
     """Junta limites por produto, FGC, teto de renda variável e teto do setor do trabalho."""
     otimizacao = premissas.otimizacao
-    limites = np.array([
-        1.0 if p.indexador in otimizacao.indexadores_sem_limite else otimizacao.limite_por_produto
-        for p in produtos
-    ])
+    limites = np.array([limite_do_produto(p, premissas) for p in produtos])
     restricoes = restricoes_fgc(produtos, meta.valor_atual, uso_fgc, premissas.fgc, crescimento)
     renda_variavel = np.array([p.renda_variavel for p in produtos], dtype=float)
     if renda_variavel.any():
         restricoes.append(RestricaoLinear(renda_variavel, perfil.teto_renda_variavel, "teto de renda variável do perfil"))
+    for conglomerado in sorted({p.conglomerado for p in produtos} - set(otimizacao.conglomerados_sem_limite)):
+        do_grupo = np.array([p.conglomerado == conglomerado for p in produtos], dtype=float)
+        if do_grupo @ limites > otimizacao.limite_por_conglomerado_na_meta:
+            restricoes.append(RestricaoLinear(
+                do_grupo, otimizacao.limite_por_conglomerado_na_meta, f"concentração no {conglomerado}"
+            ))
     mesmo_setor = np.array([p.setor == setor_trabalho for p in produtos], dtype=float)
     if setor_trabalho is not None and mesmo_setor.any():
         restricoes.append(RestricaoLinear(
             mesmo_setor, otimizacao.limite_setor_do_trabalho, "teto do setor em que o cliente trabalha"
         ))
     return ProblemaCarteira(fatores, otimizacao.nivel_cvar, limites, tuple(restricoes))
+
+
+def limite_do_produto(produto: Produto, premissas: Premissas) -> float:
+    """Fração máxima da meta num produto: sem limite (Tesouro Selic), 40% ou, para ações, 10%."""
+    otimizacao = premissas.otimizacao
+    if produto.indexador in otimizacao.indexadores_sem_limite:
+        return 1.0
+    if produto.acao_individual:
+        return min(otimizacao.limite_por_produto, otimizacao.limite_por_acao)
+    return otimizacao.limite_por_produto
 
 
 def _com_aplicacao_minima(
@@ -540,6 +621,7 @@ def otimizar_cliente(
     reamostragem: bool = False,
     semente: int | None = None,
     quantidade: int | None = None,
+    estrategia: str = MENOR_RISCO,
 ) -> Recomendacao:
     """Otimiza todas as metas do cliente, começando pela reserva de emergência.
 
@@ -553,8 +635,8 @@ def otimizar_cliente(
     for meta in sorted(cliente.metas, key=lambda m: not m.reserva_emergencia):
         resultado = otimizar_meta(
             meta, perfil, produtos, premissas, curva, uso, reamostragem, semente, quantidade,
-            empregador=cliente.empregador, setor_trabalho=cliente.setor_trabalho,
+            empregador=cliente.empregador, setor_trabalho=cliente.setor_trabalho, estrategia=estrategia,
         )
         resultados.append(resultado)
         uso = somar_usos(uso, resultado.uso_fgc)
-    return Recomendacao(cliente, perfil, tuple(resultados), uso, semente, reamostragem)
+    return Recomendacao(cliente, perfil, tuple(resultados), uso, semente, reamostragem, estrategia)

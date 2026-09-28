@@ -32,14 +32,31 @@ from talos.explicacao import (
 )
 from talos.fgc import formatar_reais
 from talos.mercado import CurvaDI, carregar_curva_di
-from talos.modelos import ErroDeDados, Premissas, Produto, carregar_cliente, carregar_prateleira, carregar_premissas
-from talos.otimizador import ATINGIVEL, DIFICIL, Recomendacao, ResultadoMeta, otimizar_cliente
+from talos.modelos import (
+    ErroDeDados,
+    Premissas,
+    Produto,
+    carregar_acoes,
+    carregar_cliente,
+    carregar_prateleira,
+    carregar_premissas,
+)
+from talos.otimizador import (
+    ATINGIVEL,
+    DIFICIL,
+    ESTRATEGIAS,
+    MENOR_RISCO,
+    Recomendacao,
+    ResultadoMeta,
+    otimizar_cliente,
+)
 from talos.validacao import ComparacaoMeta, conclusao, percentual_com_sinal, resumo_validacao, validar
 
 LARGURA = 88
 CODIGO_ERRO_DE_DADOS = 2
 NOME_PREMISSAS = "premissas.json"
 NOME_CURVA = "curva_di.csv"
+NOME_ACOES = "acoes.csv"
 PASTA_EXEMPLOS = Path("exemplos")
 ROTULOS_SITUACAO = {ATINGIVEL: "ATINGÍVEL", DIFICIL: "DIFÍCIL"}
 ROTULO_SEM_SOLUCAO = "SEM SOLUÇÃO"
@@ -77,6 +94,11 @@ def criar_parser() -> argparse.ArgumentParser:
         sub.add_argument("--cenarios", type=int, help="quantidade de cenários (padrão: a das premissas)")
         sub.add_argument("--reamostragem", action="store_true", help="usa a reamostragem de Michaud (mais lento)")
         sub.add_argument("--saidas", type=Path, default=PASTA_PADRAO, help="pasta do registro de auditoria (padrão: saidas)")
+        sub.add_argument("--acoes", type=Path, help=f"lista de ações da corretora (padrão: {NOME_ACOES} na pasta da prateleira, se existir)")
+        sub.add_argument(
+            "--estrategia", choices=ESTRATEGIAS, default=MENOR_RISCO,
+            help="menor_risco: menor risco que atinge a meta (padrão); crescimento: mais crescimento dentro do perfil",
+        )
 
     servir = comandos.add_parser("servir", help="liga a API HTTP para corretoras (só neste computador)")
     servir.add_argument("--host", default=HOST_PADRAO, help=f"endereço (padrão: {HOST_PADRAO}, só este computador)")
@@ -88,6 +110,7 @@ def criar_parser() -> argparse.ArgumentParser:
     teste.add_argument("--url", default=f"http://{HOST_PADRAO}:{PORTA_PADRAO}", help="endereço da API")
     teste.add_argument("--cliente", type=Path, default=PASTA_EXEMPLOS / "cliente.json", help="JSON do cliente enviado")
     teste.add_argument("--cenarios", type=int, help="quantidade de cenários (padrão: a das premissas do servidor)")
+    teste.add_argument("--estrategia", choices=ESTRATEGIAS, help="estratégia enviada à API (padrão: a do servidor)")
     return parser
 
 
@@ -99,7 +122,7 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         if args.comando == "servir":
             return servir(args)
         if args.comando == "testar-api":
-            print(testar_api(args.url, args.cliente, args.cenarios))
+            print(testar_api(args.url, args.cliente, args.cenarios, args.estrategia))
         else:
             print(recomendar(args) if args.comando == "recomendar" else comparar(args))
     except urllib.error.URLError as erro:
@@ -160,7 +183,7 @@ def _otimizar(args: argparse.Namespace) -> tuple[Premissas, CurvaDI, list[Produt
     pasta = args.prateleira.parent
     premissas = carregar_premissas(args.premissas or pasta / NOME_PREMISSAS)
     curva = carregar_curva_di(args.curva or pasta / NOME_CURVA, premissas)
-    produtos = carregar_prateleira(args.prateleira)
+    produtos = carregar_prateleira(args.prateleira) + _carregar_acoes_se_houver(args.acoes, pasta / NOME_ACOES)
     cliente = carregar_cliente(args.cliente)
     premissas.perfil(cliente.perfil)
     if args.cenarios is not None and args.cenarios < 1:
@@ -168,8 +191,16 @@ def _otimizar(args: argparse.Namespace) -> tuple[Premissas, CurvaDI, list[Produt
     recomendacao = otimizar_cliente(
         cliente, produtos, premissas, curva,
         reamostragem=args.reamostragem, semente=args.semente, quantidade=args.cenarios,
+        estrategia=args.estrategia,
     )
     return premissas, curva, produtos, recomendacao
+
+
+def _carregar_acoes_se_houver(pedido: Path | None, padrao: Path) -> list[Produto]:
+    """Lê a lista de ações pedida; sem pedido, usa a da pasta da prateleira se ela existir."""
+    if pedido is not None:
+        return carregar_acoes(pedido)
+    return carregar_acoes(padrao) if padrao.exists() else []
 
 
 def _cabecalho(args: argparse.Namespace, premissas: Premissas, recomendacao: Recomendacao) -> str:
@@ -177,7 +208,8 @@ def _cabecalho(args: argparse.Namespace, premissas: Premissas, recomendacao: Rec
     quantidade = f"{args.cenarios or premissas.cenarios.quantidade:,}".replace(",", ".")
     return (
         f"Premissas de {premissas.data_referencia:%d/%m/%Y} · {quantidade} cenários · "
-        f"semente {recomendacao.semente}" + (" · com reamostragem" if recomendacao.reamostragem else "")
+        f"semente {recomendacao.semente} · estratégia {recomendacao.estrategia.replace('_', ' ')}"
+        + (" · com reamostragem" if recomendacao.reamostragem else "")
     )
 
 
