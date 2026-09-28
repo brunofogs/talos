@@ -55,8 +55,25 @@ em qualquer sistema. Para sair do ambiente, digite `deactivate`.
 ```bash
 python -m talos --versao
 python -m talos recomendar --cliente exemplos/cliente.json --prateleira exemplos/prateleira.csv
-python -m talos validar --cliente exemplos/cliente.json --prateleira exemplos/prateleira.csv
 ```
+
+O `recomendar` imprime, para cada meta, a situação (atingível, difícil ou sem
+solução), o retorno necessário e o esperado, a chance de sucesso, a faixa de
+valores no fim do prazo, a carteira e as explicações. Também grava um
+registro de auditoria em JSON na pasta `saidas/`.
+
+Opções:
+
+| Opção | O que faz |
+|---|---|
+| `--premissas` e `--curva` | outros arquivos de premissas e curva (padrão: os da pasta da prateleira) |
+| `--cenarios N` | quantidade de cenários (padrão: a das premissas, 5.000) |
+| `--semente N` | outra semente para os cenários (padrão: a das premissas) |
+| `--reamostragem` | usa a reamostragem de Michaud (bem mais lento) |
+| `--saidas PASTA` | onde gravar o registro de auditoria |
+
+Se algum arquivo faltar ou tiver dados inválidos, o programa explica o
+problema em português e termina com código 2.
 
 ## Como rodar os testes
 
@@ -121,5 +138,5 @@ cenários).
 
 ## Estado atual
 
-Etapa 6 de 8: motor completo (impostos, FGC, cenários, otimizador, explicações e auditoria) e protótipo web. Os comandos
-`recomendar` e `validar` ainda não calculam nada.
+Etapa 7 de 8: `recomendar` funciona de ponta a ponta. O comando `validar`
+(comparação com referências simples) chega na etapa 8.

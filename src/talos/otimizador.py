@@ -37,6 +37,7 @@ INDEXADORES_POS_FIXADOS = ("cdi", "selic")
 TRIBUTACAO_REINVESTIMENTO = "regressivo"
 RISCO_COM_PRAZO_MINIMO = 3
 TOLERANCIA_NUMERICA = 1e-9
+PERCENTIS_VALOR_FINAL = (5, 25, 50, 75, 95)
 
 ATINGIVEL = "atingivel"
 DIFICIL = "dificil"
@@ -77,6 +78,8 @@ class ResultadoMeta:
     `situacao` é `atingivel`, `dificil` (a carteira mostrada é a de maior
     retorno dentro do risco do perfil) ou `sem_solucao` (nenhuma carteira
     possível). Nos dois primeiros casos as estatísticas estão preenchidas.
+    `valor_final_por_percentil` diz quanto a carteira vale no fim do prazo,
+    em reais, nos percentis 5, 25, 50, 75 e 95 dos cenários.
     """
 
     meta: Meta
@@ -91,6 +94,7 @@ class ResultadoMeta:
     uso_fgc: UsoFGC
     semente: int
     reamostragem: bool
+    valor_final_por_percentil: dict[int, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -517,6 +521,10 @@ def _resultado(
         uso_fgc=uso,
         semente=semente,
         reamostragem=reamostragem,
+        valor_final_por_percentil={
+            percentil: float(np.percentile(patrimonio, percentil) * meta.valor_atual)
+            for percentil in PERCENTIS_VALOR_FINAL
+        },
     )
 
 

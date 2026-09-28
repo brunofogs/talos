@@ -13,20 +13,15 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from talos.explicacao import explicar
-from talos.mercado import carregar_curva_di, cdi_medio_projetado, gerar_cenarios
+from talos.mercado import carregar_curva_di, cdi_medio_projetado
 from talos.modelos import (
     ErroDeDados,
     carregar_prateleira,
     carregar_premissas,
     cliente_de_dados,
 )
-from talos.otimizador import ResultadoMeta, fatores_liquidos, otimizar_cliente
-
-PERCENTIS_DA_FAIXA = {"p5": 5, "p25": 25, "p50": 50, "p75": 75, "p95": 95}
-
+from talos.otimizador import ResultadoMeta, otimizar_cliente
 
 def dados_da_prateleira(pasta_dados: str | Path) -> str:
     """Prateleira, premissas principais e cliente de exemplo, em JSON, para a página exibir."""
@@ -79,7 +74,7 @@ def simular(entrada_json: str, pasta_dados: str | Path) -> str:
             "retorno_esperado_aa": resultado.retorno_esperado_aa,
             "cvar": resultado.cvar,
             "probabilidade_sucesso": resultado.probabilidade_sucesso,
-            "faixa_valor_final": faixa_valor_final(resultado, premissas, curva, quantidade),
+            "faixa_valor_final": faixa_valor_final(resultado),
             "alocacoes": [
                 {
                     "produto": a.produto.nome,
@@ -104,15 +99,8 @@ def simular(entrada_json: str, pasta_dados: str | Path) -> str:
     }, ensure_ascii=False)
 
 
-def faixa_valor_final(resultado: ResultadoMeta, premissas, curva, quantidade: int | None) -> dict[str, float] | None:
-    """Valores finais da carteira (em reais) nos percentis 5, 25, 50, 75 e 95 dos cenários.
-
-    Usa os mesmos cenários do otimizador (mesma semente, prazo e quantidade).
-    """
-    if not resultado.alocacoes:
+def faixa_valor_final(resultado: ResultadoMeta) -> dict[str, float] | None:
+    """Valores finais da carteira (em reais) nos percentis 5, 25, 50, 75 e 95, calculados pelo otimizador."""
+    if resultado.valor_final_por_percentil is None:
         return None
-    cenarios = gerar_cenarios(premissas, curva, resultado.meta.prazo_meses, resultado.semente, quantidade)
-    fatores = fatores_liquidos([a.produto for a in resultado.alocacoes], cenarios, premissas)
-    pesos = np.array([a.peso for a in resultado.alocacoes])
-    valores = fatores @ pesos * resultado.meta.valor_atual
-    return {nome: float(np.percentile(valores, p)) for nome, p in PERCENTIS_DA_FAIXA.items()}
+    return {f"p{percentil}": valor for percentil, valor in resultado.valor_final_por_percentil.items()}

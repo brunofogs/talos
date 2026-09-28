@@ -32,20 +32,12 @@ def test_linprog_highs_disponivel() -> None:
     assert np.allclose(resultado.x, [1.0, 0.0])
 
 
-def test_cli_responde_com_aviso() -> None:
-    """`python -m talos recomendar ...` roda e termina com o aviso de simulação."""
+def test_cli_mostra_a_versao() -> None:
+    """`python -m talos --versao` roda como programa separado e mostra a versão."""
     ambiente = {**os.environ, "PYTHONPATH": str(RAIZ / "src")}
-    ambiente.pop("PYTHONIOENCODING", None)  # a própria CLI deve garantir UTF-8
     processo = subprocess.run(
-        [
-            sys.executable, "-m", "talos", "recomendar",
-            "--cliente", "cliente.json", "--prateleira", "prateleira.csv",
-        ],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        env=ambiente,
-        cwd=RAIZ,
+        [sys.executable, "-m", "talos", "--versao"],
+        capture_output=True, text=True, encoding="utf-8", env=ambiente, cwd=RAIZ,
     )
     assert processo.returncode == 0
-    assert processo.stdout.strip().endswith(talos.AVISO_SIMULACAO)
+    assert processo.stdout.strip() == f"talos {talos.__version__}"
