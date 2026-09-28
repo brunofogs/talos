@@ -28,6 +28,11 @@ from talos.modelos import ErroDeDados, PremissasFGC, Produto
 
 UsoFGC = dict[str, float]
 
+# O otimizador trabalha com uma tolerância numérica minúscula e pode deixar um
+# valor frações de centavo acima do limite. Diferenças menores que 1 centavo
+# são arredondamento, não violação.
+TOLERANCIA_REAIS = 0.01
+
 
 @dataclass(frozen=True)
 class RestricaoLinear:
@@ -126,10 +131,10 @@ def violacoes_fgc(
         f"{conglomerado}: {formatar_reais(valor)} em produtos cobertos, acima do limite "
         f"de {formatar_reais(fgc.limite_por_conglomerado)} por conglomerado."
         for conglomerado, valor in sorted(uso.items())
-        if valor > fgc.limite_por_conglomerado
+        if valor > fgc.limite_por_conglomerado + TOLERANCIA_REAIS
     ]
     total = sum(uso.values())
-    if total > fgc.teto_global:
+    if total > fgc.teto_global + TOLERANCIA_REAIS:
         mensagens.append(
             f"Total de {formatar_reais(total)} em produtos cobertos, acima do teto global "
             f"de {formatar_reais(fgc.teto_global)} por CPF."

@@ -136,6 +136,14 @@ def test_carteira_dentro_dos_limites(fgc: PremissasFGC) -> None:
     assert violacoes_fgc([(BOREAL_A, 200_000), (BOREAL_B, 50_000)], fgc) == []
 
 
+def test_fracao_de_centavo_nao_e_violacao(fgc: PremissasFGC) -> None:
+    """O otimizador pode passar do limite por frações de centavo (tolerância numérica do solver).
+    Isso é arredondamento: R$ 250.000,004 não conta como violação, R$ 250.000,02 conta.
+    """
+    assert violacoes_fgc([(BOREAL_A, 250_000.004)], fgc) == []
+    assert len(violacoes_fgc([(BOREAL_A, 250_000.02)], fgc)) == 1
+
+
 def test_carteira_acima_do_limite_do_conglomerado(fgc: PremissasFGC) -> None:
     """R$ 200 mil + R$ 60 mil no Boreal estouram o limite de R$ 250 mil."""
     mensagens = violacoes_fgc([(BOREAL_A, 200_000), (BOREAL_B, 60_000), (TESOURO, 500_000)], fgc)

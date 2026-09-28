@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from talos.fgc import RestricaoLinear, violacoes_fgc
+from talos.fgc import TOLERANCIA_REAIS, RestricaoLinear, violacoes_fgc
 from talos.mercado import CurvaDI, carregar_curva_di
 from talos.modelos import (
     Cliente,
@@ -258,7 +258,7 @@ def test_fgc_respeitado_numa_meta_grande(produtos: list[Produto], premissas: Pre
     grande = meta(atual=1_000_000, alvo=1_200_000, meses=24)
     resultado = otimizar_meta(grande, premissas.perfil("moderado"), produtos, premissas, curva, quantidade=CENARIOS_NOS_TESTES)
     assert resultado.situacao == ATINGIVEL
-    assert all(valor <= 250_000 + 1e-3 for valor in resultado.uso_fgc.values())
+    assert all(valor <= 250_000 + TOLERANCIA_REAIS for valor in resultado.uso_fgc.values())
     assert violacoes_fgc([(a.produto, a.exposicao_fgc) for a in resultado.alocacoes], premissas.fgc) == []
 
 
@@ -269,10 +269,10 @@ def test_fgc_somado_entre_metas(produtos: list[Produto], premissas: Premissas, c
     ))
     recomendacao = otimizar_cliente(cliente, produtos, premissas, curva, quantidade=CENARIOS_NOS_TESTES)
     assert all(r.alocacoes for r in recomendacao.resultados)
-    assert all(valor <= 250_000 + 1e-3 for valor in recomendacao.uso_fgc.values())
+    assert all(valor <= 250_000 + TOLERANCIA_REAIS for valor in recomendacao.uso_fgc.values())
     usados_na_b = recomendacao.resultados[1].uso_fgc
     for conglomerado, valor in usados_na_b.items():
-        assert valor + recomendacao.resultados[0].uso_fgc.get(conglomerado, 0) <= 250_000 + 1e-3
+        assert valor + recomendacao.resultados[0].uso_fgc.get(conglomerado, 0) <= 250_000 + TOLERANCIA_REAIS
 
 
 # --- Casos sem solução e reamostragem ----------------------------------------------------------
