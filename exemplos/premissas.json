@@ -1,0 +1,64 @@
+{
+  "_aviso": "Dados fictícios e simplificados, só para testar o Talos. Os limites do FGC e as alíquotas de IR precisam ser conferidos nas fontes oficiais antes de qualquer uso real.",
+  "data_referencia": "2026-09-25",
+  "juro_real_aa": 0.080,
+  "dias_uteis_por_ano": 252,
+  "dias_corridos_por_ano": 365,
+  "impostos": {
+    "tabela_regressiva": [
+      {"ate_dias": 180, "aliquota": 0.225},
+      {"ate_dias": 360, "aliquota": 0.200},
+      {"ate_dias": 720, "aliquota": 0.175},
+      {"ate_dias": null, "aliquota": 0.150}
+    ],
+    "tabela_fundo_curto_prazo": [
+      {"ate_dias": 180, "aliquota": 0.225},
+      {"ate_dias": null, "aliquota": 0.200}
+    ],
+    "aliquota_acoes": 0.15,
+    "come_cotas": {
+      "meses": [5, 11],
+      "aliquota_longo_prazo": 0.15,
+      "aliquota_curto_prazo": 0.20
+    }
+  },
+  "fgc": {
+    "limite_por_conglomerado": 250000,
+    "teto_global": 1000000,
+    "janela_teto_anos": 4
+  },
+  "perfis": {
+    "conservador": {"risco_maximo": 2, "teto_renda_variavel": 0.00, "cvar_maximo": 0.02},
+    "moderado":    {"risco_maximo": 3, "teto_renda_variavel": 0.20, "cvar_maximo": 0.08},
+    "arrojado":    {"risco_maximo": 5, "teto_renda_variavel": 0.50, "cvar_maximo": 0.20}
+  },
+  "otimizacao": {
+    "nivel_cvar": 0.95,
+    "limite_por_produto": 0.40,
+    "indexadores_sem_limite": ["selic"],
+    "prazo_minimo_renda_variavel_meses": 36,
+    "prazo_minimo_risco_3_meses": 24,
+    "reamostragens": 50,
+    "limite_setor_do_trabalho": 0.30
+  },
+  "cenarios": {
+    "quantidade": 5000,
+    "semente": 42,
+    "graus_liberdade": 5,
+    "classes": {
+      "pos_fixado": {"premio_sobre_cdi_aa": 0.00, "volatilidade_aa": 0.015, "escala_prazo": "constante"},
+      "prefixado":  {"premio_sobre_cdi_aa": 0.00, "volatilidade_aa": 0.000, "escala_prazo": "constante"},
+      "inflacao":   {"premio_sobre_cdi_aa": 0.00, "volatilidade_aa": 0.020, "escala_prazo": "constante"},
+      "acoes":      {"premio_sobre_cdi_aa": 0.05, "volatilidade_aa": 0.250, "escala_prazo": "raiz_do_prazo"}
+    },
+    "correlacoes": {
+      "ordem": ["pos_fixado", "prefixado", "inflacao", "acoes"],
+      "matriz": [
+        [ 1.0, 0.0,  0.3, -0.2],
+        [ 0.0, 1.0,  0.0,  0.0],
+        [ 0.3, 0.0,  1.0, -0.1],
+        [-0.2, 0.0, -0.1,  1.0]
+      ]
+    }
+  }
+}

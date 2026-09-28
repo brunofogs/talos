@@ -1,0 +1,19 @@
+# Dados fictícios: emissores, taxas e produtos inventados só para testar o Talos. Não use para decisões reais.
+# taxa: indexador cdi = fração do CDI (1.10 = 110%); selic e ipca = spread ao ano; prefixado = taxa ao ano; variavel = não usada (retorno vem dos cenários)
+# setor: setor de quem assume o risco (financeiro, governo_federal, energia, diversificado); fundo DI conta como governo_federal porque investe em títulos públicos
+nome,emissor,conglomerado,indexador,taxa,taxa_adm_aa,vencimento_meses,carencia_meses,liquidez_diaria,tributacao,classe,risco,coberto_fgc,aplicacao_minima,setor
+Tesouro Selic 2031,Tesouro Nacional,Tesouro Nacional,selic,0.0005,0,60,0,sim,regressivo,pos_fixado,1,não,100,governo_federal
+CDB Aurora Liquidez Diária,Banco Aurora,Conglomerado Aurora,cdi,1.00,0,24,0,sim,regressivo,pos_fixado,1,sim,100,financeiro
+Fundo DI Horizonte,Horizonte Gestão,Conglomerado Horizonte,cdi,1.00,0.004,,0,sim,fundo_longo_prazo,pos_fixado,1,não,100,governo_federal
+CDB Aurora 2 anos,Banco Aurora,Conglomerado Aurora,cdi,1.12,0,24,0,não,regressivo,pos_fixado,2,sim,1000,financeiro
+LCI Horizonte 1 ano,Banco Horizonte,Conglomerado Horizonte,cdi,0.92,0,12,12,não,isento,pos_fixado,2,sim,1000,financeiro
+LCA Aurora 2 anos,Banco Aurora,Conglomerado Aurora,cdi,0.94,0,24,9,não,isento,pos_fixado,2,sim,1000,financeiro
+CDB Boreal 3 anos,Banco Boreal,Conglomerado Boreal,cdi,1.15,0,36,0,não,regressivo,pos_fixado,3,sim,1000,financeiro
+CDB Financeira Boreal 5 anos,Financeira Boreal,Conglomerado Boreal,cdi,1.18,0,60,0,não,regressivo,pos_fixado,3,sim,1000,financeiro
+CDB Prefixado Horizonte 3 anos,Banco Horizonte,Conglomerado Horizonte,prefixado,0.135,0,36,0,não,regressivo,prefixado,2,sim,1000,financeiro
+Tesouro Prefixado 2029,Tesouro Nacional,Tesouro Nacional,prefixado,0.130,0,40,0,sim,regressivo,prefixado,2,não,100,governo_federal
+CDB IPCA+ Aurora 4 anos,Banco Aurora,Conglomerado Aurora,ipca,0.070,0,48,0,não,regressivo,inflacao,2,sim,1000,financeiro
+Tesouro IPCA+ 2032,Tesouro Nacional,Tesouro Nacional,ipca,0.075,0,72,0,sim,regressivo,inflacao,3,não,100,governo_federal
+Debênture Incentivada Energia Sol,Energia Sol S.A.,Grupo Sol,ipca,0.078,0,60,0,não,isento,inflacao,3,não,1000,energia
+ETF Ações Brasil Atlas,Atlas Gestão,Grupo Atlas,variavel,0,0.001,,0,sim,acoes,acoes,4,não,100,diversificado
+Fundo de Ações Small Caps Atlas,Atlas Gestão,Grupo Atlas,variavel,0,0.015,,0,sim,acoes,acoes,5,não,500,diversificado

@@ -1,0 +1,39 @@
+{
+  "_aviso": "Dados fictícios, criados só para testar o Talos. Não correspondem a nenhuma pessoa real.",
+  "identificador": "cliente-exemplo-001",
+  "perfil": "moderado",
+  "renda_mensal": 4500.00,
+  "dividas_caras": false,
+  "empregador": null,
+  "setor_trabalho": null,
+  "metas": [
+    {
+      "nome": "Reserva de emergência",
+      "valor_atual": 12000.00,
+      "valor_alvo": 13000.00,
+      "prazo_meses": 12,
+      "reserva_emergencia": true
+    },
+    {
+      "nome": "Entrada do apartamento",
+      "valor_atual": 25000.00,
+      "valor_alvo": 36000.00,
+      "prazo_meses": 48,
+      "reserva_emergencia": false
+    },
+    {
+      "nome": "Aposentadoria",
+      "valor_atual": 10000.00,
+      "valor_alvo": 60000.00,
+      "prazo_meses": 240,
+      "reserva_emergencia": false
+    },
+    {
+      "nome": "Viagem",
+      "valor_atual": 3000.00,
+      "valor_alvo": 5000.00,
+      "prazo_meses": 24,
+      "reserva_emergencia": false
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+name: pagina
+
+# Monta o protótipo web (prototipo/montar.py) e publica no GitHub Pages.
+# Roda a cada push na branch main, depois que os testes passam.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pagina
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[teste]"
+      - run: python -m pytest -q
+
+  montar:
+    needs: testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Montar a página com o motor Talos e o Pyodide
+        run: python prototipo/montar.py
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: prototipo/dist
+
+  publicar:
+    needs: montar
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacao.outputs.page_url }}
+    steps:
+      - id: publicacao
+        uses: actions/deploy-pages@v4

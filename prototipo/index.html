@@ -1,0 +1,841 @@
+<meta charset="utf-8">
+<title>Talos Simulador</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground: #f3f6f5;
+  --surface: #ffffff;
+  --surface-2: #e9efed;
+  --ink: #14201b;
+  --ink-2: #47554f;
+  --muted: #6f7d77;
+  --line: #d3ddd9;
+  --accent: #0f5c6e;
+  --accent-soft: #dcecef;
+  --accent-ink: #ffffff;
+  --ok: #2c7a4b;
+  --ok-soft: #e1f1e7;
+  --warn: #9a6400;
+  --warn-soft: #f8ecd2;
+  --crit: #b3412f;
+  --crit-soft: #f7e1dc;
+  --serie-pos_fixado: #2a78d6;
+  --serie-prefixado: #eb6834;
+  --serie-inflacao: #1baf7a;
+  --serie-acoes: #eda100;
+  --faixa: #0f5c6e;
+  --faixa-suave: #9fc6cf;
+  --sombra: 0 1px 2px rgb(20 32 27 / 0.06), 0 4px 16px rgb(20 32 27 / 0.05);
+  --fonte: "Schibsted Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --fonte-dados: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #0d1412;
+    --surface: #141d1a;
+    --surface-2: #1b2622;
+    --ink: #e4ebe8;
+    --ink-2: #aab7b1;
+    --muted: #82908a;
+    --line: #2a3632;
+    --accent: #5eb3c6;
+    --accent-soft: #173239;
+    --accent-ink: #0d1412;
+    --ok: #62bb86;
+    --ok-soft: #173024;
+    --warn: #e0a83a;
+    --warn-soft: #34290f;
+    --crit: #e57a66;
+    --crit-soft: #3a1d18;
+    --serie-pos_fixado: #3987e5;
+    --serie-prefixado: #d95926;
+    --serie-inflacao: #199e70;
+    --serie-acoes: #c98500;
+    --faixa: #5eb3c6;
+    --faixa-suave: #2c5963;
+    --sombra: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0d1412;
+  --surface: #141d1a;
+  --surface-2: #1b2622;
+  --ink: #e4ebe8;
+  --ink-2: #aab7b1;
+  --muted: #82908a;
+  --line: #2a3632;
+  --accent: #5eb3c6;
+  --accent-soft: #173239;
+  --accent-ink: #0d1412;
+  --ok: #62bb86;
+  --ok-soft: #173024;
+  --warn: #e0a83a;
+  --warn-soft: #34290f;
+  --crit: #e57a66;
+  --crit-soft: #3a1d18;
+  --serie-pos_fixado: #3987e5;
+  --serie-prefixado: #d95926;
+  --serie-inflacao: #199e70;
+  --serie-acoes: #c98500;
+  --faixa: #5eb3c6;
+  --faixa-suave: #2c5963;
+  --sombra: none;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--fonte);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-inline: 16px;
+  padding-block: 0 48px;
+}
+h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.2; }
+p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.numero { font-variant-numeric: tabular-nums; }
+.dado { font-family: var(--fonte-dados); font-variant-numeric: tabular-nums; }
+
+/* Cabeçalho */
+.topo {
+  max-width: 1240px;
+  margin-inline: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding-block: 20px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.marca { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.marca h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.marca p { color: var(--ink-2); }
+.selo {
+  font-family: var(--fonte-dados);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warn);
+  background: var(--warn-soft);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.estado-motor { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13.5px; }
+.luz { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+.luz.pronto { background: var(--ok); }
+.luz.falha { background: var(--crit); }
+@media (prefers-reduced-motion: no-preference) {
+  .luz.carregando { animation: pulsar 1.2s ease-in-out infinite; }
+  @keyframes pulsar { 50% { opacity: 0.3; } }
+}
+
+/* Estrutura */
+.grade {
+  max-width: 1240px;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 28px;
+  padding-block: 24px;
+  align-items: start;
+}
+@media (max-width: 880px) { .grade { grid-template-columns: minmax(0, 1fr); } }
+
+/* Formulário */
+.painel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  display: grid;
+  gap: 18px;
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+@media (max-width: 880px) { .painel { position: static; max-height: none; } }
+.painel h2 { font-size: 16px; font-weight: 600; }
+.rotulo {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+.campo { display: grid; gap: 5px; }
+.campo label { font-size: 13px; color: var(--ink-2); }
+.campo input, .campo select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.campo input:focus, .campo select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.linha-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.marcar { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.marcar input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+.lista-metas { display: grid; gap: 12px; }
+.meta-form {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: var(--surface-2);
+}
+.meta-form .cabeca { display: flex; gap: 8px; align-items: end; }
+.meta-form .cabeca .campo { flex: 1; }
+.linha-3 { display: grid; grid-template-columns: 1fr 1fr 0.8fr; gap: 8px; align-items: end; }
+.botao-remover {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 6px;
+  width: 36px;
+  height: 38px;
+  cursor: pointer;
+  color: var(--ink-2);
+  flex: none;
+}
+.botao-remover:hover { color: var(--crit); border-color: var(--crit); }
+.botao-sec {
+  border: 1px dashed var(--line);
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 500;
+}
+.botao-sec:hover { border-color: var(--accent); }
+.botao-principal {
+  border: 0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
+.botao-principal:disabled { opacity: 0.55; cursor: progress; }
+.erro-form { color: var(--crit); font-size: 13.5px; }
+.nota-campo { font-size: 12.5px; color: var(--muted); margin-top: -8px; }
+
+/* Resultados */
+.resultados { display: grid; gap: 20px; min-width: 0; }
+.faixa-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+.alerta {
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--crit-soft);
+  color: var(--ink);
+  border: 1px solid var(--crit);
+  display: flex;
+  gap: 10px;
+}
+.alerta strong { color: var(--crit); flex: none; }
+.alerta.neutro { background: var(--accent-soft); border-color: var(--accent); }
+.alerta.neutro strong { color: var(--accent); }
+
+.carregando-caixa {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 28px;
+  display: grid;
+  gap: 16px;
+}
+.carregando-caixa h2 { font-size: 20px; }
+.passos { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.passos li { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+.passos li.feito { color: var(--ink); }
+.passos li.atual { color: var(--ink); font-weight: 500; }
+.passos .marcador {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 1.5px solid var(--line);
+  display: grid; place-items: center;
+  font-size: 12px; flex: none;
+}
+.passos li.feito .marcador { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.passos li.atual .marcador { border-color: var(--accent); }
+
+.cartao {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--sombra);
+  overflow: hidden;
+}
+.cartao-topo {
+  padding: 18px 20px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+.cartao-topo h3 { font-size: 19px; font-weight: 600; }
+.cartao-topo .caminho { color: var(--ink-2); font-size: 14px; }
+.pilula {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pilula svg { width: 13px; height: 13px; }
+.pilula.atingivel { background: var(--ok-soft); color: var(--ok); }
+.pilula.dificil { background: var(--warn-soft); color: var(--warn); }
+.pilula.sem_solucao { background: var(--crit-soft); color: var(--crit); }
+.cartao-corpo { padding: 18px 20px 20px; display: grid; gap: 20px; }
+
+.numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 520px) { .numeros { grid-template-columns: 1fr; } }
+.numero-bloco { display: grid; gap: 2px; }
+.numero-bloco .valor { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.numero-bloco .valor.bom { color: var(--ok); }
+.numero-bloco .valor.ruim { color: var(--warn); }
+.numero-bloco .nota { font-size: 12.5px; color: var(--muted); }
+
+.grafico-faixa { position: relative; }
+.grafico-faixa svg { display: block; width: 100%; height: auto; overflow: visible; }
+.grafico-faixa .eixo { stroke: var(--line); }
+.grafico-faixa .texto { fill: var(--ink-2); font-family: var(--fonte-dados); font-size: 11px; }
+.grafico-faixa .texto-forte { fill: var(--ink); font-family: var(--fonte); font-size: 12px; font-weight: 600; }
+.dica {
+  position: absolute;
+  pointer-events: none;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 10px));
+  z-index: 2;
+}
+.dica table { border-collapse: collapse; }
+.dica td { padding: 1px 0; }
+.dica td + td { padding-left: 14px; text-align: right; font-family: var(--fonte-dados); }
+
+.barra-alocacao { display: flex; gap: 2px; height: 14px; }
+.barra-alocacao span { display: block; min-width: 3px; }
+.barra-alocacao span:first-child { border-radius: 4px 0 0 4px; }
+.barra-alocacao span:last-child { border-radius: 0 4px 4px 0; }
+.barra-alocacao span:only-child { border-radius: 4px; }
+.legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); }
+.legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+.produtos { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.produto { border-bottom: 1px solid var(--line); }
+.produto summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 2px;
+}
+.produto summary::-webkit-details-marker { display: none; }
+.produto summary .cor { width: 10px; height: 10px; border-radius: 2px; }
+.produto summary .nome { font-weight: 500; }
+.produto summary .nome small { display: block; color: var(--muted); font-weight: 400; font-size: 12.5px; }
+.produto summary .dado { font-size: 13.5px; text-align: right; }
+.produto summary .seta { color: var(--muted); transition: transform 0.15s; }
+.produto[open] summary .seta { transform: rotate(90deg); }
+@media (max-width: 520px) {
+  .produto summary { grid-template-columns: 12px minmax(0, 1fr) auto auto; }
+  .produto summary .rend { display: none; }
+}
+.frases { margin: 0 0 12px 24px; padding: 0; display: grid; gap: 6px; color: var(--ink-2); font-size: 14px; max-width: 70ch; }
+.frases li::marker { color: var(--muted); }
+.resumo { display: grid; gap: 6px; max-width: 72ch; color: var(--ink-2); font-size: 14px; }
+.resumo p:first-child { color: var(--ink); }
+.nao-usados summary { cursor: pointer; color: var(--accent); font-size: 13.5px; font-weight: 500; }
+.nao-usados ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ink-2); font-size: 13.5px; }
+
+/* Seções de apoio */
+.apoio { max-width: 1240px; margin-inline: auto; display: grid; gap: 16px; }
+.apoio > details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 20px; }
+.apoio summary { cursor: pointer; font-weight: 600; }
+.passo-a-passo { margin: 14px 0 4px; padding-left: 22px; display: grid; gap: 8px; max-width: 75ch; color: var(--ink-2); }
+.passo-a-passo strong { color: var(--ink); font-weight: 600; }
+.tabela-rolagem { overflow-x: auto; margin-top: 12px; }
+table.prateleira { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.prateleira th, table.prateleira td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+table.prateleira th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 0.03em; }
+table.prateleira td.n { text-align: right; font-family: var(--fonte-dados); }
+
+.aviso {
+  max-width: 1240px;
+  margin: 24px auto 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--ink);
+  font-size: 13.5px;
+  border-radius: 0 6px 6px 0;
+}
+</style>
+
+<header class="topo">
+  <div class="marca">
+    <h1>Talos</h1>
+    <p>Carteiras por meta para investidores de baixa e média renda</p>
+    <span class="selo">Protótipo · dados fictícios</span>
+  </div>
+  <div class="estado-motor" role="status" aria-live="polite">
+    <span class="luz carregando" id="luz"></span>
+    <span id="estado-texto">Carregando o motor…</span>
+  </div>
+</header>
+
+<div class="grade">
+  <form class="painel" id="formulario" novalidate>
+    <div class="campo">
+      <span class="rotulo">Cliente (fictício)</span>
+    </div>
+    <div class="linha-2">
+      <div class="campo">
+        <label for="perfil">Perfil de suitability</label>
+        <select id="perfil">
+          <option value="conservador">Conservador</option>
+          <option value="moderado" selected>Moderado</option>
+          <option value="arrojado">Arrojado</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="renda">Renda mensal (R$)</label>
+        <input id="renda" type="number" min="0" step="100" inputmode="decimal" value="4500">
+      </div>
+    </div>
+    <label class="marcar" for="dividas"><input id="dividas" type="checkbox"> Tem dívidas caras (cartão, cheque especial)</label>
+    <div class="linha-2">
+      <div class="campo">
+        <label for="empregador">Onde trabalha</label>
+        <select id="empregador">
+          <option value="">Não informar</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="setor">Setor do trabalho</label>
+        <select id="setor">
+          <option value="">Não informar / outro</option>
+          <option value="financeiro">Financeiro (bancos)</option>
+          <option value="governo_federal">Governo federal</option>
+          <option value="energia">Energia</option>
+        </select>
+      </div>
+    </div>
+    <p class="nota-campo">Emprego e investimentos não devem depender da mesma empresa: o grupo onde a pessoa trabalha fica fora da carteira, e o setor dela fica limitado.</p>
+
+    <div class="campo">
+      <span class="rotulo">Metas</span>
+    </div>
+    <div class="lista-metas" id="lista-metas"></div>
+    <button type="button" class="botao-sec" id="adicionar-meta">+ Adicionar meta</button>
+
+    <div class="campo">
+      <label for="cenarios">Precisão da simulação</label>
+      <select id="cenarios">
+        <option value="1000">Rápida: 1.000 cenários</option>
+        <option value="5000" selected>Completa: 5.000 cenários</option>
+      </select>
+    </div>
+    <p class="erro-form" id="erro-form" hidden></p>
+    <button type="submit" class="botao-principal" id="gerar" disabled>Gerar carteiras</button>
+  </form>
+
+  <main class="resultados" id="resultados">
+    <section class="carregando-caixa" id="carregando">
+      <h2>O motor Talos roda aqui, no seu navegador</h2>
+      <p class="resumo">Nada é enviado para servidores: o mesmo código Python do projeto é carregado nesta página e calcula as carteiras localmente. Na primeira abertura isso leva de 20 a 40 segundos.</p>
+      <ol class="passos" id="passos">
+        <li data-etapa="python" class="atual"><span class="marcador"></span>Carregando o Python do navegador (cerca de 35 MB)</li>
+        <li data-etapa="pacotes"><span class="marcador"></span>Carregando numpy e scipy</li>
+        <li data-etapa="talos"><span class="marcador"></span>Carregando o motor Talos e a prateleira de exemplo</li>
+        <li data-etapa="calculo"><span class="marcador"></span>Calculando as carteiras do cliente de exemplo</li>
+      </ol>
+    </section>
+  </main>
+</div>
+
+<section class="apoio">
+  <details>
+    <summary>Como o Talos monta cada carteira</summary>
+    <ol class="passo-a-passo">
+      <li><strong>Uma meta por vez.</strong> A reserva de emergência vem primeiro e só usa produtos de liquidez diária e risco 1.</li>
+      <li><strong>Filtra a prateleira.</strong> Tira produtos com risco acima do perfil, carência ou vencimento depois da meta, renda variável em metas de menos de 3 anos e risco 3 em metas de menos de 2 anos.</li>
+      <li><strong>Simula o futuro.</strong> Sorteia milhares de cenários de CDI, inflação e bolsa, com caudas gordas e correlações, a partir da curva de DI.</li>
+      <li><strong>Desconta impostos.</strong> IR regressivo, isenção de LCI/LCA e incentivadas, 15% em ações e come-cotas dos fundos, em cada cenário.</li>
+      <li><strong>Escolhe a carteira de menor risco que chega à meta.</strong> Minimiza a perda média nos 5% piores cenários (CVaR), com no máximo 40% por produto, limites do FGC por conglomerado, teto de renda variável do perfil e aplicação mínima.</li>
+      <li><strong>Se a meta não cabe no perfil,</strong> mostra a carteira de maior retorno dentro do risco aceito e avisa que a meta está difícil.</li>
+      <li><strong>Explica por regras,</strong> sem IA generativa: cada frase vem de um molde preenchido com os números da carteira.</li>
+    </ol>
+  </details>
+  <details>
+    <summary>Prateleira usada nesta simulação (fictícia)</summary>
+    <div class="tabela-rolagem">
+      <table class="prateleira" id="tabela-prateleira">
+        <thead><tr><th>Produto</th><th>Emissor</th><th>Remuneração</th><th>Vencimento</th><th>Liquidez</th><th>IR</th><th>Risco</th><th>FGC</th><th>Mínimo</th><th>Setor</th></tr></thead>
+        <tbody><tr><td colspan="10">A prateleira aparece quando o motor terminar de carregar.</td></tr></tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<p class="aviso" id="aviso"><strong>Aviso:</strong> isto é uma simulação feita com dados fictícios e premissas simplificadas. Não é uma recomendação de investimento e não há promessa de retorno.</p>
+
+<script>
+const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const moedaCentavos = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const pct = (x, casas = 1) => (x * 100).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }) + "%";
+const NOMES_CLASSE = { pos_fixado: "Pós-fixado", prefixado: "Prefixado", inflacao: "Inflação", acoes: "Ações" };
+const NOMES_SETOR = { financeiro: "Financeiro", governo_federal: "Governo federal", energia: "Energia", diversificado: "Diversificado" };
+const NOMES_SITUACAO = { atingivel: "Atingível", dificil: "Difícil", sem_solucao: "Sem solução" };
+const ICONES_SITUACAO = {
+  atingivel: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3 3 7-7"/></svg>',
+  dificil: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v6M8 12v1"/></svg>',
+  sem_solucao: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+};
+
+function esc(texto) {
+  return String(texto).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function prazoTexto(meses) {
+  if (meses % 12 === 0) return meses === 12 ? "1 ano" : `${meses / 12} anos`;
+  return meses === 1 ? "1 mês" : `${meses} meses`;
+}
+function chanceTexto(p) {
+  if (p < 0.001) return "< 0,1%";
+  if (p > 0.999) return "> 99,9%";
+  return pct(p);
+}
+
+/* ---------- Formulário de metas ---------- */
+const listaMetas = document.getElementById("lista-metas");
+let contadorMetas = 0;
+
+function adicionarMeta(meta = { nome: "", valor_atual: 1000, valor_alvo: 2000, prazo_meses: 36, reserva_emergencia: false }) {
+  const id = ++contadorMetas;
+  const caixa = document.createElement("div");
+  caixa.className = "meta-form";
+  caixa.innerHTML = `
+    <div class="cabeca">
+      <div class="campo"><label for="meta-nome-${id}">Nome da meta</label>
+        <input id="meta-nome-${id}" data-campo="nome" type="text" value="${esc(meta.nome)}" placeholder="Ex.: Troca do carro"></div>
+      <button type="button" class="botao-remover" aria-label="Remover meta" title="Remover meta">✕</button>
+    </div>
+    <div class="linha-3">
+      <div class="campo"><label for="meta-atual-${id}">Tem hoje (R$)</label>
+        <input id="meta-atual-${id}" data-campo="valor_atual" type="number" min="1" step="100" inputmode="decimal" value="${meta.valor_atual}"></div>
+      <div class="campo"><label for="meta-alvo-${id}">Quer ter (R$)</label>
+        <input id="meta-alvo-${id}" data-campo="valor_alvo" type="number" min="1" step="100" inputmode="decimal" value="${meta.valor_alvo}"></div>
+      <div class="campo"><label for="meta-prazo-${id}">Prazo em meses</label>
+        <input id="meta-prazo-${id}" data-campo="prazo_meses" type="number" min="1" step="1" inputmode="numeric" value="${meta.prazo_meses}"></div>
+    </div>
+    <label class="marcar" for="meta-reserva-${id}"><input id="meta-reserva-${id}" data-campo="reserva_emergencia" type="checkbox" ${meta.reserva_emergencia ? "checked" : ""}> É a reserva de emergência</label>`;
+  caixa.querySelector(".botao-remover").addEventListener("click", () => caixa.remove());
+  listaMetas.appendChild(caixa);
+}
+document.getElementById("adicionar-meta").addEventListener("click", () => adicionarMeta());
+
+function lerFormulario() {
+  const metas = [...listaMetas.querySelectorAll(".meta-form")].map((caixa, i) => {
+    const valor = (campo) => caixa.querySelector(`[data-campo="${campo}"]`);
+    return {
+      nome: valor("nome").value.trim() || `Meta ${i + 1}`,
+      valor_atual: Number(valor("valor_atual").value),
+      valor_alvo: Number(valor("valor_alvo").value),
+      prazo_meses: Math.round(Number(valor("prazo_meses").value)),
+      reserva_emergencia: valor("reserva_emergencia").checked,
+    };
+  });
+  return {
+    identificador: "cliente-prototipo",
+    perfil: document.getElementById("perfil").value,
+    renda_mensal: Number(document.getElementById("renda").value) || 0,
+    dividas_caras: document.getElementById("dividas").checked,
+    empregador: document.getElementById("empregador").value || null,
+    setor_trabalho: document.getElementById("setor").value || null,
+    metas,
+    quantidade: Number(document.getElementById("cenarios").value),
+  };
+}
+
+function validar(cliente) {
+  if (!cliente.metas.length) return "Adicione pelo menos uma meta.";
+  const nomes = new Set();
+  for (const m of cliente.metas) {
+    if (!(m.valor_atual > 0)) return `Em "${m.nome}", o valor de hoje precisa ser maior que zero.`;
+    if (!(m.valor_alvo > 0)) return `Em "${m.nome}", o valor que quer ter precisa ser maior que zero.`;
+    if (!(m.prazo_meses >= 1)) return `Em "${m.nome}", o prazo precisa ser de pelo menos 1 mês.`;
+    if (nomes.has(m.nome)) return `Há duas metas chamadas "${m.nome}". Dê nomes diferentes.`;
+    nomes.add(m.nome);
+  }
+  return null;
+}
+
+/* ---------- Gráfico da faixa de valor final ---------- */
+function graficoFaixa(meta) {
+  const f = meta.faixa_valor_final;
+  const largura = 640, altura = 96, margem = 16;
+  const menor = Math.min(f.p5, meta.valor_atual), maior = Math.max(f.p95, meta.valor_alvo);
+  const folga = (maior - menor) * 0.06 || maior * 0.05;
+  const x0 = menor - folga, x1 = maior + folga;
+  const x = (v) => margem + ((v - x0) / (x1 - x0)) * (largura - 2 * margem);
+  const yBanda = 52;
+  const marcador = (valor, rotulo, acima) => {
+    const px = x(valor);
+    const ancora = px < 90 ? "start" : px > largura - 90 ? "end" : "middle";
+    const yTexto = acima ? 16 : 92;
+    return `<line x1="${px}" x2="${px}" y1="${acima ? 22 : 40}" y2="${acima ? 66 : 78}" stroke="var(--ink)" stroke-width="1.5" ${acima ? "" : 'stroke-dasharray="3 3"'}/>
+      <text x="${px}" y="${yTexto}" text-anchor="${ancora}" class="${acima ? "texto-forte" : "texto"}">${rotulo}</text>`;
+  };
+  return `
+    <svg viewBox="0 0 ${largura} ${altura}" role="img" aria-label="Faixa de valores finais: 5% piores até ${moeda.format(f.p5)}, metade dos cenários acima de ${moeda.format(f.p50)}, 5% melhores acima de ${moeda.format(f.p95)}">
+      <line class="eixo" x1="${margem}" x2="${largura - margem}" y1="${yBanda}" y2="${yBanda}"/>
+      <line x1="${x(f.p5)}" x2="${x(f.p95)}" y1="${yBanda}" y2="${yBanda}" stroke="var(--faixa-suave)" stroke-width="6" stroke-linecap="round"/>
+      <rect x="${x(f.p25)}" y="${yBanda - 8}" width="${Math.max(x(f.p75) - x(f.p25), 2)}" height="16" rx="4" fill="var(--faixa)"/>
+      <circle cx="${x(f.p50)}" cy="${yBanda}" r="5" fill="var(--surface)" stroke="var(--faixa)" stroke-width="2.5"/>
+      ${marcador(meta.valor_alvo, `Alvo ${moeda.format(meta.valor_alvo)}`, true)}
+      ${marcador(meta.valor_atual, `Hoje ${moeda.format(meta.valor_atual)}`, false)}
+      <rect class="alvo-hover" x="${x(f.p5) - 8}" y="${yBanda - 16}" width="${x(f.p95) - x(f.p5) + 16}" height="32" fill="transparent"/>
+    </svg>`;
+}
+
+function ligarDica(conteiner, meta) {
+  const alvo = conteiner.querySelector(".alvo-hover");
+  if (!alvo) return;
+  const dica = document.createElement("div");
+  dica.className = "dica";
+  dica.hidden = true;
+  const f = meta.faixa_valor_final;
+  dica.innerHTML = `<table>
+    <tr><td>5% piores cenários: até</td><td>${moeda.format(f.p5)}</td></tr>
+    <tr><td>Metade dos cenários: acima de</td><td>${moeda.format(f.p50)}</td></tr>
+    <tr><td>Metade do meio (25% a 75%)</td><td>${moeda.format(f.p25)} a ${moeda.format(f.p75)}</td></tr>
+    <tr><td>5% melhores cenários: acima de</td><td>${moeda.format(f.p95)}</td></tr></table>`;
+  conteiner.appendChild(dica);
+  const mover = (evento) => {
+    const caixa = conteiner.getBoundingClientRect();
+    const px = Math.min(Math.max(evento.clientX - caixa.left, 140), caixa.width - 140);
+    dica.style.left = px + "px";
+    dica.style.top = (caixa.height * 0.4) + "px";
+    dica.hidden = false;
+  };
+  alvo.addEventListener("pointermove", mover);
+  alvo.addEventListener("pointerenter", mover);
+  alvo.addEventListener("pointerleave", () => { dica.hidden = true; });
+}
+
+/* ---------- Cartões de resultado ---------- */
+function cartaoMeta(meta) {
+  const cartao = document.createElement("article");
+  cartao.className = "cartao";
+  const temCarteira = meta.alocacoes.length > 0;
+  const caminho = `${moeda.format(meta.valor_atual)} → ${moeda.format(meta.valor_alvo)} em ${prazoTexto(meta.prazo_meses)}`;
+  let corpo = "";
+  if (temCarteira) {
+    const classes = [...new Set(meta.alocacoes.map((a) => a.classe))];
+    corpo += `
+      <div class="numeros">
+        <div class="numero-bloco"><span class="rotulo">Precisa render</span><span class="valor">${pct(meta.retorno_necessario_aa)}</span><span class="nota">ao ano, para chegar ao alvo</span></div>
+        <div class="numero-bloco"><span class="rotulo">Carteira rende</span><span class="valor ${meta.retorno_esperado_aa >= meta.retorno_necessario_aa ? "bom" : "ruim"}">${pct(meta.retorno_esperado_aa)}</span><span class="nota">ao ano em média, líquido de IR</span></div>
+        <div class="numero-bloco"><span class="rotulo">Chance de atingir</span><span class="valor">${chanceTexto(meta.probabilidade_sucesso)}</span><span class="nota">dos cenários simulados</span></div>
+      </div>
+      <div>
+        <span class="rotulo">Valor no fim do prazo</span>
+        <div class="grafico-faixa">${graficoFaixa(meta)}</div>
+        <div class="legenda"><span><i style="background:var(--faixa)"></i>Metade do meio dos cenários</span><span><i style="background:var(--faixa-suave)"></i>Do 5º ao 95º percentil</span><span>○ Cenário do meio</span></div>
+      </div>
+      <div style="display:grid;gap:8px">
+        <span class="rotulo">Carteira</span>
+        <div class="barra-alocacao" role="img" aria-label="Divisão da carteira por produto">
+          ${meta.alocacoes.map((a) => `<span style="flex:${a.peso};background:var(--serie-${a.classe})" title="${esc(a.produto)}: ${pct(a.peso)}"></span>`).join("")}
+        </div>
+        <div class="legenda">${classes.map((c) => `<span><i style="background:var(--serie-${c})"></i>${NOMES_CLASSE[c]}</span>`).join("")}</div>
+      </div>
+      <div class="produtos">
+        ${meta.alocacoes.map((a) => `
+          <details class="produto">
+            <summary>
+              <span class="cor" style="background:var(--serie-${a.classe})"></span>
+              <span class="nome">${esc(a.produto)}<small>${esc(a.emissor)} · ${NOMES_CLASSE[a.classe]}</small></span>
+              <span class="dado">${pct(a.peso)}</span>
+              <span class="dado">${moedaCentavos.format(a.valor)}</span>
+              <span class="dado rend" title="Rendimento médio esperado ao ano, líquido de IR">${pct(a.retorno_liquido_esperado_aa, 2)} a.a.</span>
+            </summary>
+            <ul class="frases">${a.frases.slice(1).map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
+          </details>`).join("")}
+      </div>`;
+  }
+  corpo += `<div class="resumo">${meta.resumo.map((f) => `<p>${esc(f)}</p>`).join("")}</div>`;
+  if (meta.nao_usados.length) {
+    corpo += `<details class="nao-usados"><summary>Produtos que não entraram nesta meta e por quê</summary>
+      <ul>${meta.nao_usados.map((f) => `<li>${esc(f)}</li>`).join("")}</ul></details>`;
+  }
+  cartao.innerHTML = `
+    <header class="cartao-topo">
+      <div><h3>${esc(meta.nome)}</h3><p class="caminho numero">${caminho}${meta.reserva_emergencia ? " · reserva de emergência" : ""}</p></div>
+      <span class="pilula ${meta.situacao}">${ICONES_SITUACAO[meta.situacao]}${NOMES_SITUACAO[meta.situacao]}</span>
+    </header>
+    <div class="cartao-corpo">${corpo}</div>`;
+  const grafico = cartao.querySelector(".grafico-faixa");
+  if (grafico) ligarDica(grafico, meta);
+  return cartao;
+}
+
+function mostrarResultado(resultado, segundos, quantidade) {
+  const area = document.getElementById("resultados");
+  area.innerHTML = "";
+  const info = document.createElement("div");
+  info.className = "faixa-info";
+  const atingiveis = resultado.metas.filter((m) => m.situacao === "atingivel").length;
+  info.innerHTML = `<span><strong>${atingiveis} de ${resultado.metas.length}</strong> metas atingíveis no perfil ${esc(resultado.perfil)}</span>
+    <span class="numero">${quantidade.toLocaleString("pt-BR")} cenários · semente ${resultado.semente} · calculado em ${segundos.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} s no navegador</span>`;
+  area.appendChild(info);
+  for (const frase of resultado.antes_de_tudo) {
+    const sobreEmprego = frase.startsWith("Como o cliente trabalha");
+    const alerta = document.createElement("div");
+    alerta.className = sobreEmprego ? "alerta neutro" : "alerta";
+    alerta.innerHTML = `<strong>${sobreEmprego ? "Emprego" : "Antes de tudo"}</strong><span>${esc(frase)}</span>`;
+    area.appendChild(alerta);
+  }
+  resultado.metas.forEach((m) => area.appendChild(cartaoMeta(m)));
+  document.getElementById("aviso").innerHTML = `<strong>Aviso:</strong> ${esc(resultado.aviso.replace(/^Aviso:\s*/, ""))}`;
+}
+
+function mostrarPrateleira(dados) {
+  const remuneracao = (p) => {
+    if (p.indexador === "cdi") return `${pct(p.taxa, p.taxa % 0.01 ? 1 : 0)} do CDI`;
+    if (p.indexador === "selic") return `Selic + ${pct(p.taxa, 2)}`;
+    if (p.indexador === "prefixado") return `${pct(p.taxa)} a.a.`;
+    if (p.indexador === "ipca") return `IPCA + ${pct(p.taxa)}`;
+    return "Variável";
+  };
+  const ir = { regressivo: "Regressivo", isento: "Isento", acoes: "15% (ações)", fundo_longo_prazo: "Come-cotas LP", fundo_curto_prazo: "Come-cotas CP" };
+  document.querySelector("#tabela-prateleira tbody").innerHTML = dados.produtos.map((p) => `<tr>
+    <td>${esc(p.nome)}</td><td>${esc(p.emissor)}</td><td>${remuneracao(p)}</td>
+    <td>${p.vencimento_meses ? prazoTexto(p.vencimento_meses) : "—"}</td>
+    <td>${p.liquidez_diaria ? "Diária" : p.carencia_meses ? `Carência ${p.carencia_meses} m` : "No vencimento"}</td>
+    <td>${ir[p.tributacao]}</td><td class="n">${p.risco}</td><td>${p.coberto_fgc ? "Sim" : "Não"}</td>
+    <td class="n">${moeda.format(p.aplicacao_minima)}</td><td>${NOMES_SETOR[p.setor]}</td></tr>`).join("");
+  const seletor = document.getElementById("empregador");
+  const conglomerados = [...new Set(dados.produtos.map((p) => p.conglomerado))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  for (const nome of conglomerados) {
+    const opcao = document.createElement("option");
+    opcao.value = nome;
+    opcao.textContent = nome;
+    seletor.appendChild(opcao);
+  }
+}
+
+/* ---------- Motor (Web Worker) ---------- */
+const botao = document.getElementById("gerar");
+const erroForm = document.getElementById("erro-form");
+const luz = document.getElementById("luz");
+const estadoTexto = document.getElementById("estado-texto");
+const ordemEtapas = ["python", "pacotes", "talos", "calculo"];
+let quantidadePedida = 5000;
+
+function marcarEtapa(etapa) {
+  const atual = ordemEtapas.indexOf(etapa);
+  document.querySelectorAll("#passos li").forEach((li) => {
+    const i = ordemEtapas.indexOf(li.dataset.etapa);
+    li.className = i < atual ? "feito" : i === atual ? "atual" : "";
+    li.querySelector(".marcador").textContent = i < atual ? "✓" : "";
+  });
+}
+
+function estado(texto, tipo) {
+  estadoTexto.textContent = texto;
+  luz.className = "luz " + tipo;
+}
+
+let motor;
+try {
+  motor = new Worker(new URL("motor.js", location.href));
+} catch (erro) {
+  estado("O navegador não permitiu iniciar o motor", "falha");
+}
+
+function pedirSimulacao() {
+  const cliente = lerFormulario();
+  const problema = validar(cliente);
+  erroForm.hidden = !problema;
+  erroForm.textContent = problema || "";
+  if (problema) return;
+  quantidadePedida = cliente.quantidade;
+  botao.disabled = true;
+  botao.textContent = "Calculando…";
+  estado("Calculando carteiras…", "carregando");
+  motor.postMessage({ tipo: "simular", entrada: cliente });
+}
+
+if (motor) {
+  motor.onmessage = (evento) => {
+    const msg = evento.data;
+    if (msg.tipo === "progresso") {
+      marcarEtapa(msg.etapa);
+      estado(msg.texto + "…", "carregando");
+    } else if (msg.tipo === "pronto") {
+      mostrarPrateleira(msg.prateleira);
+      marcarEtapa("calculo");
+      pedirSimulacao();
+    } else if (msg.tipo === "resultado") {
+      botao.disabled = false;
+      botao.textContent = "Gerar carteiras";
+      if (msg.resultado.erro) {
+        erroForm.hidden = false;
+        erroForm.textContent = msg.resultado.erro;
+        estado("Motor pronto", "pronto");
+        return;
+      }
+      estado("Motor pronto", "pronto");
+      mostrarResultado(msg.resultado, msg.segundos, quantidadePedida);
+    } else if (msg.tipo === "falha") {
+      botao.disabled = true;
+      estado("O motor não carregou", "falha");
+      const area = document.getElementById("resultados");
+      area.innerHTML = `<div class="alerta"><strong>Não foi possível carregar o motor.</strong><span>${esc(msg.texto)}</span></div>`;
+    }
+  };
+}
+
+document.getElementById("formulario").addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  if (!botao.disabled) pedirSimulacao();
+});
+
+/* Cliente de exemplo, igual ao exemplos/cliente.json do projeto */
+[
+  { nome: "Reserva de emergência", valor_atual: 12000, valor_alvo: 13000, prazo_meses: 12, reserva_emergencia: true },
+  { nome: "Entrada do apartamento", valor_atual: 25000, valor_alvo: 36000, prazo_meses: 48, reserva_emergencia: false },
+  { nome: "Aposentadoria", valor_atual: 10000, valor_alvo: 60000, prazo_meses: 240, reserva_emergencia: false },
+  { nome: "Viagem", valor_atual: 3000, valor_alvo: 5000, prazo_meses: 24, reserva_emergencia: false },
+].forEach(adicionarMeta);
+</script>
