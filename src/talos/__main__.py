@@ -1,6 +1,9 @@
 """Linha de comando do Talos: `python -m talos <comando>`.
 
     python -m talos recomendar --cliente exemplos/cliente.json --prateleira exemplos/prateleira.csv
+    python -m talos validar --cliente exemplos/cliente.json --prateleira exemplos/prateleira.csv
+    python -m talos servir          (API HTTP em http://127.0.0.1:8000)
+    python -m talos testar-api      (chama a API como uma corretora faria)
 
 Por padrão, as premissas e a curva de juros são lidas da mesma pasta da
 prateleira (`premissas.json` e `curva_di.csv`), e o registro de auditoria
@@ -11,11 +14,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+import urllib.error
 import textwrap
 from collections.abc import Sequence
 from pathlib import Path
 
 from talos import AVISO_SIMULACAO, __version__
+from talos.api import HOST_PADRAO, PORTA_PADRAO, carregar_motor, criar_servidor, testar_api
 from talos.auditoria import PASTA_PADRAO, registrar
 from talos.explicacao import (
     Explicacao,
@@ -35,6 +40,7 @@ LARGURA = 88
 CODIGO_ERRO_DE_DADOS = 2
 NOME_PREMISSAS = "premissas.json"
 NOME_CURVA = "curva_di.csv"
+PASTA_EXEMPLOS = Path("exemplos")
 ROTULOS_SITUACAO = {ATINGIVEL: "ATINGÍVEL", DIFICIL: "DIFÍCIL"}
 ROTULO_SEM_SOLUCAO = "SEM SOLUÇÃO"
 
@@ -51,7 +57,7 @@ def usar_utf8_no_terminal() -> None:
 
 
 def criar_parser() -> argparse.ArgumentParser:
-    """Monta o leitor de argumentos com os comandos `recomendar` e `validar`."""
+    """Monta o leitor de argumentos com os comandos `recomendar`, `validar`, `servir` e `testar-api`."""
     parser = argparse.ArgumentParser(
         prog="talos",
         description="Talos: carteiras de investimento por meta (simulação).",
@@ -71,6 +77,17 @@ def criar_parser() -> argparse.ArgumentParser:
         sub.add_argument("--cenarios", type=int, help="quantidade de cenários (padrão: a das premissas)")
         sub.add_argument("--reamostragem", action="store_true", help="usa a reamostragem de Michaud (mais lento)")
         sub.add_argument("--saidas", type=Path, default=PASTA_PADRAO, help="pasta do registro de auditoria (padrão: saidas)")
+
+    servir = comandos.add_parser("servir", help="liga a API HTTP para corretoras (só neste computador)")
+    servir.add_argument("--host", default=HOST_PADRAO, help=f"endereço (padrão: {HOST_PADRAO}, só este computador)")
+    servir.add_argument("--porta", type=int, default=PORTA_PADRAO, help=f"porta (padrão: {PORTA_PADRAO})")
+    servir.add_argument("--dados", type=Path, default=PASTA_EXEMPLOS, help="pasta com prateleira, premissas e curva (padrão: exemplos)")
+    servir.add_argument("--saidas", type=Path, default=PASTA_PADRAO, help="pasta do registro de auditoria (padrão: saidas)")
+
+    teste = comandos.add_parser("testar-api", help="chama a API com o cliente de exemplo, como uma corretora faria")
+    teste.add_argument("--url", default=f"http://{HOST_PADRAO}:{PORTA_PADRAO}", help="endereço da API")
+    teste.add_argument("--cliente", type=Path, default=PASTA_EXEMPLOS / "cliente.json", help="JSON do cliente enviado")
+    teste.add_argument("--cenarios", type=int, help="quantidade de cenários (padrão: a das premissas do servidor)")
     return parser
 
 
@@ -79,13 +96,47 @@ def main(argumentos: Sequence[str] | None = None) -> int:
     usar_utf8_no_terminal()
     args = criar_parser().parse_args(argumentos)
     try:
-        print(recomendar(args) if args.comando == "recomendar" else comparar(args))
+        if args.comando == "servir":
+            return servir(args)
+        if args.comando == "testar-api":
+            print(testar_api(args.url, args.cliente, args.cenarios))
+        else:
+            print(recomendar(args) if args.comando == "recomendar" else comparar(args))
+    except urllib.error.URLError as erro:
+        print(
+            f"Não foi possível falar com a API em {args.url} ({erro.reason}). "
+            "Ligue o serviço em outro terminal com: python -m talos servir",
+            file=sys.stderr,
+        )
+        return CODIGO_ERRO_DE_DADOS
     except FileNotFoundError as erro:
         print(f"Arquivo não encontrado: {erro.filename}", file=sys.stderr)
         return CODIGO_ERRO_DE_DADOS
     except ErroDeDados as erro:
         print(f"Erro nos dados: {erro}", file=sys.stderr)
         return CODIGO_ERRO_DE_DADOS
+    return 0
+
+
+def servir(args: argparse.Namespace) -> int:
+    """Liga a API e atende até o usuário apertar Ctrl+C."""
+    motor = carregar_motor(args.dados, args.saidas)
+    try:
+        servidor = criar_servidor(motor, args.host, args.porta)
+    except OSError as erro:
+        print(f"Não foi possível usar a porta {args.porta}: {erro}. Tente outra com --porta.", file=sys.stderr)
+        return CODIGO_ERRO_DE_DADOS
+    host, porta = servidor.server_address[:2]
+    print(f"Talos {__version__} atendendo em http://{host}:{porta}")
+    print("Rotas: GET /saude · GET /prateleira · POST /recomendacoes · POST /validacoes")
+    print("Teste em outro terminal com: python -m talos testar-api")
+    print("Para desligar, aperte Ctrl+C.", flush=True)
+    try:
+        servidor.serve_forever()
+    except KeyboardInterrupt:
+        print("\nServiço desligado.")
+    finally:
+        servidor.server_close()
     return 0
 
 

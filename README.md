@@ -81,6 +81,44 @@ Opções:
 Se algum arquivo faltar ou tiver dados inválidos, o programa explica o
 problema em português e termina com código 2.
 
+## API para corretoras
+
+O Talos também funciona como um serviço web (API em JSON), para o sistema de
+uma corretora pedir recomendações. Em um terminal, ligue o serviço:
+
+```bash
+python -m talos servir
+```
+
+Em outro terminal, faça o papel da corretora. O comando abaixo chama a API
+com o cliente de exemplo e mostra a resposta exatamente como ela chega:
+
+```bash
+python -m talos testar-api
+```
+
+| Rota | O que faz |
+|---|---|
+| `GET /saude` | confirma que o serviço está no ar e mostra a versão |
+| `GET /prateleira` | produtos, perfis aceitos e data das premissas |
+| `POST /recomendacoes` | recebe o cliente no formato do `cliente.json` e devolve a carteira de cada meta, as estatísticas e as explicações; grava a auditoria em `saidas/` |
+| `POST /validacoes` | mesmo corpo; devolve a comparação com 100% do CDI e com pesos iguais |
+
+Nas rotas `POST`, a URL aceita `?cenarios=N&semente=N`. Erros voltam em
+português, no formato `{"erro": "..."}`, com o código HTTP adequado (400 para
+dados inválidos, 404 para rota inexistente, 405 para método errado, 413 para
+corpo acima de 1 MB). Os cálculos entram numa fila e rodam um de cada vez.
+
+Opções do `servir`: `--porta` (padrão 8000), `--host` (padrão 127.0.0.1),
+`--dados` (pasta com prateleira, premissas e curva; padrão `exemplos`) e
+`--saidas`. Opções do `testar-api`: `--url`, `--cliente` e `--cenarios`.
+
+> **Segurança:** o serviço usa só a biblioteca padrão do Python, atende
+> apenas neste computador por padrão e **não tem autenticação nem HTTPS**.
+> Serve para demonstração e integração local. Antes de expor à internet ou
+> à rede da corretora, é preciso colocar autenticação, HTTPS e limites de
+> uso na frente dele.
+
 ## Como rodar os testes
 
 ```bash
@@ -117,7 +155,7 @@ em **Settings → Pages**, escolha **Source: GitHub Actions**.
 
 | Pasta | Conteúdo |
 |---|---|
-| `src/talos/` | código do motor |
+| `src/talos/` | código do motor e da API |
 | `prototipo/` | página web de demonstração e o script que a monta |
 | `tests/` | testes automáticos |
 | `exemplos/` | cliente, prateleira, curva de juros e premissas (fictícios) |
@@ -145,4 +183,5 @@ cenários).
 ## Estado atual
 
 As 8 etapas do CLAUDE.md estão concluídas, mais a regra de emprego
-(empregador fora da carteira e teto para o setor de trabalho) e o protótipo web.
+(empregador fora da carteira e teto para o setor de trabalho), o protótipo web
+e a API para corretoras (`servir` e `testar-api`).
