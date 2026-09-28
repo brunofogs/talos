@@ -117,3 +117,21 @@ def test_como_programa_separado(tmp_path: Path) -> None:
     assert processo.returncode == 0, processo.stderr
     assert "Reserva de emergência" in processo.stdout
     assert " ".join(processo.stdout.split()).endswith(AVISO_SIMULACAO)
+
+
+# --- validar -----------------------------------------------------------------------------------
+
+def test_validar_de_ponta_a_ponta(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """`validar` mostra as três carteiras por meta, a conclusão, o resumo e o aviso; não grava auditoria."""
+    argumentos = argumentos_de_exemplo(tmp_path)
+    argumentos[0] = "validar"
+    assert main(argumentos) == 0
+    saida = capsys.readouterr().out
+    assert saida.startswith("TALOS · Validação para cliente-exemplo-001 (perfil moderado)")
+    assert saida.count("  Talos ") == 4
+    assert saida.count("  100% do CDI ") == 4
+    assert saida.count("  Pesos iguais ") == 4
+    assert "Resumo: em " in saida
+    assert " ".join(saida.split()).endswith(AVISO_SIMULACAO)
+    assert all(len(linha) <= 88 for linha in saida.splitlines())
+    assert not list(tmp_path.glob("*.json"))

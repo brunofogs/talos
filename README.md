@@ -55,12 +55,18 @@ em qualquer sistema. Para sair do ambiente, digite `deactivate`.
 ```bash
 python -m talos --versao
 python -m talos recomendar --cliente exemplos/cliente.json --prateleira exemplos/prateleira.csv
+python -m talos validar --cliente exemplos/cliente.json --prateleira exemplos/prateleira.csv
 ```
 
 O `recomendar` imprime, para cada meta, a situação (atingível, difícil ou sem
 solução), o retorno necessário e o esperado, a chance de sucesso, a faixa de
 valores no fim do prazo, a carteira e as explicações. Também grava um
 registro de auditoria em JSON na pasta `saidas/`.
+
+O `validar` compara, nos mesmos cenários, a carteira do Talos com duas
+referências simples: 100% do CDI e pesos iguais entre os produtos que servem
+para cada meta. Mostra retorno esperado, resultado nos 5% piores cenários e
+chance de sucesso lado a lado, com uma conclusão por meta.
 
 Opções:
 
@@ -138,5 +144,5 @@ cenários).
 
 ## Estado atual
 
-Etapa 7 de 8: `recomendar` funciona de ponta a ponta. O comando `validar`
-(comparação com referências simples) chega na etapa 8.
+As 8 etapas do CLAUDE.md estão concluídas, mais a regra de emprego
+(empregador fora da carteira e teto para o setor de trabalho) e o protótipo web.

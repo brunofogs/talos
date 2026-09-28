@@ -26,9 +26,10 @@ from talos.explicacao import (
     formatar_probabilidade,
 )
 from talos.fgc import formatar_reais
-from talos.mercado import carregar_curva_di
-from talos.modelos import ErroDeDados, carregar_cliente, carregar_prateleira, carregar_premissas
+from talos.mercado import CurvaDI, carregar_curva_di
+from talos.modelos import ErroDeDados, Premissas, Produto, carregar_cliente, carregar_prateleira, carregar_premissas
 from talos.otimizador import ATINGIVEL, DIFICIL, Recomendacao, ResultadoMeta, otimizar_cliente
+from talos.validacao import ComparacaoMeta, conclusao, percentual_com_sinal, resumo_validacao, validar
 
 LARGURA = 88
 CODIGO_ERRO_DE_DADOS = 2
@@ -78,10 +79,7 @@ def main(argumentos: Sequence[str] | None = None) -> int:
     usar_utf8_no_terminal()
     args = criar_parser().parse_args(argumentos)
     try:
-        if args.comando == "recomendar":
-            print(recomendar(args))
-        else:
-            print(f"O comando '{args.comando}' ainda não foi implementado (etapa 8).\n\n{AVISO_SIMULACAO}")
+        print(recomendar(args) if args.comando == "recomendar" else comparar(args))
     except FileNotFoundError as erro:
         print(f"Arquivo não encontrado: {erro.filename}", file=sys.stderr)
         return CODIGO_ERRO_DE_DADOS
@@ -93,6 +91,21 @@ def main(argumentos: Sequence[str] | None = None) -> int:
 
 def recomendar(args: argparse.Namespace) -> str:
     """Lê as entradas, otimiza, explica, grava a auditoria e devolve o relatório em texto."""
+    premissas, curva, produtos, recomendacao = _otimizar(args)
+    explicacao = explicar(recomendacao, premissas)
+    caminho = registrar(recomendacao, explicacao, produtos, curva, premissas, args.saidas)
+    return formatar_relatorio(recomendacao, explicacao, _cabecalho(args, premissas, recomendacao), caminho)
+
+
+def comparar(args: argparse.Namespace) -> str:
+    """Otimiza e compara cada meta com 100% do CDI e com pesos iguais, nos mesmos cenários."""
+    premissas, curva, produtos, recomendacao = _otimizar(args)
+    comparacoes = validar(recomendacao, produtos, premissas, curva, args.cenarios)
+    return formatar_validacao(recomendacao, comparacoes, _cabecalho(args, premissas, recomendacao))
+
+
+def _otimizar(args: argparse.Namespace) -> tuple[Premissas, CurvaDI, list[Produto], Recomendacao]:
+    """Carrega as entradas e otimiza todas as metas do cliente."""
     pasta = args.prateleira.parent
     premissas = carregar_premissas(args.premissas or pasta / NOME_PREMISSAS)
     curva = carregar_curva_di(args.curva or pasta / NOME_CURVA, premissas)
@@ -101,19 +114,20 @@ def recomendar(args: argparse.Namespace) -> str:
     premissas.perfil(cliente.perfil)
     if args.cenarios is not None and args.cenarios < 1:
         raise ErroDeDados("--cenarios precisa ser de pelo menos 1.")
-
     recomendacao = otimizar_cliente(
         cliente, produtos, premissas, curva,
         reamostragem=args.reamostragem, semente=args.semente, quantidade=args.cenarios,
     )
-    explicacao = explicar(recomendacao, premissas)
-    caminho = registrar(recomendacao, explicacao, produtos, curva, premissas, args.saidas)
+    return premissas, curva, produtos, recomendacao
+
+
+def _cabecalho(args: argparse.Namespace, premissas: Premissas, recomendacao: Recomendacao) -> str:
+    """Linha com a data das premissas, a quantidade de cenários e a semente."""
     quantidade = f"{args.cenarios or premissas.cenarios.quantidade:,}".replace(",", ".")
-    cabecalho = (
+    return (
         f"Premissas de {premissas.data_referencia:%d/%m/%Y} · {quantidade} cenários · "
         f"semente {recomendacao.semente}" + (" · com reamostragem" if recomendacao.reamostragem else "")
     )
-    return formatar_relatorio(recomendacao, explicacao, cabecalho, caminho)
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +190,46 @@ def _secao_meta(resultado: ResultadoMeta, texto: ExplicacaoMeta, numero: int, to
         for frase in texto.nao_usados:
             linhas += _paragrafo(frase, "    · ")
     return linhas
+
+
+def formatar_validacao(
+    recomendacao: Recomendacao, comparacoes: Sequence[ComparacaoMeta], cabecalho: str
+) -> str:
+    """Relatório da validação: uma tabela por meta, a conclusão, um resumo e o aviso final."""
+    linhas = [
+        f"TALOS · Validação para {recomendacao.cliente.identificador} (perfil {recomendacao.perfil.nome})",
+        cabecalho,
+        "",
+    ]
+    linhas += _paragrafo(
+        "Cada carteira é avaliada nos mesmos cenários. Referências: 100% do CDI (um CDB comum) e "
+        "pesos iguais entre os produtos que servem para a meta. A coluna \"5% piores\" mostra quanto "
+        "o valor aplicado varia, em média, nos 5% piores cenários até o fim do prazo."
+    )
+    total = len(comparacoes)
+    for numero, (comparacao, resultado) in enumerate(zip(comparacoes, recomendacao.resultados), start=1):
+        rotulo = ROTULOS_SITUACAO.get(comparacao.situacao, ROTULO_SEM_SOLUCAO)
+        titulo = f"Meta {numero} de {total}: {comparacao.meta.nome}"
+        linhas += ["", "=" * LARGURA, f"{titulo}{rotulo:>{LARGURA - len(titulo)}}"]
+        linhas += _paragrafo(
+            f"Precisa render {formatar_percentual(resultado.retorno_necessario_aa)} a.a. para ir de "
+            f"{formatar_reais(comparacao.meta.valor_atual)} a {formatar_reais(comparacao.meta.valor_alvo)} "
+            f"em {formatar_prazo(comparacao.meta.prazo_meses)}"
+        )
+        linhas += [
+            "-" * LARGURA,
+            f"  {'Carteira':<14}  {'Rende a.a.':>10}  {'5% piores':>10}  {'Chance de atingir':>18}",
+        ]
+        for linha in comparacao.linhas:
+            linhas.append(
+                f"  {linha.carteira:<14}  {formatar_percentual(linha.retorno_esperado_aa):>10}  "
+                f"{percentual_com_sinal(linha.resultado_piores):>10}  "
+                f"{formatar_probabilidade(linha.probabilidade_sucesso):>18}"
+            )
+        linhas += [""] + _paragrafo(conclusao(comparacao), "• ")
+    linhas += ["", "=" * LARGURA] + _paragrafo(resumo_validacao(comparacoes)) + [""]
+    linhas += _paragrafo(AVISO_SIMULACAO)
+    return "\n".join(linhas)
 
 
 def _tabela_carteira(resultado: ResultadoMeta) -> list[str]:
