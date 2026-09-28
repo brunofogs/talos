@@ -26,7 +26,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -e ".[teste]"
-      - run: python -m pytest -q
+      - name: Rodar os testes
+        shell: bash
+        # Versões instaladas e cada teste que falhar viram anotações, visíveis no resumo do GitHub
+        run: |
+          set +e
+          echo "::notice title=Versões::$(python -c 'import sys, numpy, scipy, pandas, pytest; print(sys.version.split()[0], "numpy", numpy.__version__, "scipy", scipy.__version__, "pandas", pandas.__version__, "pytest", pytest.__version__)')"
+          python -m pytest -v --tb=short -rf 2>&1 | tee resultado_testes.txt
+          situacao=${PIPESTATUS[0]}
+          grep -E "^(FAILED|ERROR) |^E  |Error" resultado_testes.txt | head -20 | sed 's/^/::error::/'
+          exit $situacao
 
   montar:
     needs: testes
