@@ -69,6 +69,8 @@ Linux, com Python 3.10 e 3.12 (arquivo `.github/workflows/testes.yml`).
 
 ## Protótipo web
 
+**Link:** https://brunofogs.github.io/talos/ (dados fictícios; na primeira abertura, o motor leva de 20 a 40 segundos para carregar).
+
 A pasta `prototipo/` tem uma página que roda o **mesmo código Python** do
 Talos dentro do navegador (com Pyodide), sem servidor: dá para editar o
 perfil e as metas do cliente e ver as carteiras, a chance de sucesso e as
