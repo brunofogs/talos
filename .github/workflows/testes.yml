@@ -21,6 +21,13 @@ jobs:
       - name: Instalar o Talos e as dependências de teste
         run: python -m pip install -e ".[teste]"
       - name: Rodar os testes
-        run: python -m pytest -v
+        shell: bash
+        # Cada teste que falhar vira uma anotação (::error::), visível no resumo do GitHub
+        run: |
+          set +e
+          python -m pytest -v --tb=line -rf 2>&1 | tee resultado_testes.txt
+          situacao=${PIPESTATUS[0]}
+          grep -E "^(FAILED|ERROR) |^(/|[A-Za-z]:).*:[0-9]+: " resultado_testes.txt | head -20 | sed 's/^/::error::/'
+          exit $situacao
       - name: Conferir a linha de comando
         run: python -m talos --versao
