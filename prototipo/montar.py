@@ -10,10 +10,15 @@ scipy. Este é o único passo que usa a internet; depois disso a pasta
 `dist/` funciona sozinha. Para testar localmente:
 
     python -m http.server 8000 --directory prototipo/dist
+
+Com `--cdn`, o Pyodide não é baixado: a página o carrega do jsDelivr, que
+distribui esses arquivos bem mais rápido que o GitHub Pages. É o modo usado
+na versão publicada.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import urllib.request
@@ -76,11 +81,18 @@ def baixar_pyodide() -> None:
 
 
 def main() -> None:
-    """Monta a pasta `dist/` e grava a lista de arquivos que a página deve carregar."""
+    """Monta a pasta `dist/` e grava a lista de arquivos e de onde carregar o Pyodide."""
+    leitor = argparse.ArgumentParser(description="Monta a pasta prototipo/dist.")
+    leitor.add_argument("--cdn", action="store_true", help="carrega o Pyodide do jsDelivr em vez de copiá-lo")
+    args = leitor.parse_args()
+
     arquivos = copiar_codigo()
     (DESTINO / "arquivos.json").write_text(json.dumps(arquivos, indent=2), encoding="utf-8")
-    baixar_pyodide()
-    print(f"Pronto: {DESTINO}")
+    endereco = ENDERECO_PYODIDE if args.cdn else "pyodide/"
+    (DESTINO / "config.json").write_text(json.dumps({"pyodide": endereco}, indent=2), encoding="utf-8")
+    if not args.cdn:
+        baixar_pyodide()
+    print(f"Pronto: {DESTINO} (Pyodide: {endereco})")
 
 
 if __name__ == "__main__":

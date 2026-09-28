@@ -10,9 +10,13 @@ function avisar(tipo, dados) {
 
 async function iniciar() {
   const base = new URL("./", self.location.href).href;
+  // config.json diz de onde vem o Python do navegador: da própria pasta (padrão,
+  // funciona sem internet) ou de um servidor de distribuição (versão publicada).
+  const config = await (await fetch(base + "config.json")).json();
+  const enderecoPyodide = new URL(config.pyodide, base).href;
   avisar("progresso", { etapa: "python", texto: "Carregando o Python do navegador" });
-  importScripts(base + "pyodide/pyodide.js");
-  pyodide = await loadPyodide({ indexURL: base + "pyodide/" });
+  importScripts(enderecoPyodide + "pyodide.js");
+  pyodide = await loadPyodide({ indexURL: enderecoPyodide });
 
   avisar("progresso", { etapa: "pacotes", texto: "Carregando numpy e scipy" });
   await pyodide.loadPackage(["numpy", "scipy"]);

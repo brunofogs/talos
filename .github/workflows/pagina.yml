@@ -45,8 +45,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Montar a página com o motor Talos e o Pyodide
-        run: python prototipo/montar.py
+      - name: Montar a página com o motor Talos (Pyodide vem do jsDelivr)
+        run: python prototipo/montar.py --cdn
       - uses: actions/upload-pages-artifact@v3
         with:
           path: prototipo/dist

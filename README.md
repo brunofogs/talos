@@ -192,7 +192,8 @@ python -m http.server 8000 --directory prototipo/dist
 Depois abra `http://localhost:8000` no navegador.
 
 No GitHub, o workflow `.github/workflows/pagina.yml` roda os testes, monta a
-página e publica no GitHub Pages a cada push na branch `main`. Para isso,
+página (com `--cdn`: o Python do navegador vem do jsDelivr, bem mais rápido) e
+publica no GitHub Pages a cada push na branch `main`. Para isso,
 em **Settings → Pages**, escolha **Source: GitHub Actions**.
 
 ## Organização
